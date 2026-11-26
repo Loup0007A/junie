@@ -3,6 +3,7 @@ import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from
 import EmojiPicker from 'emoji-picker-react';
 import { api, useAuth } from '../hooks/useContexts';
 import { openRimbaudPicker } from './RimbaudGame';
+import { openPoem } from './PoemReader';
 import { stripMarkup } from './MessageBubble';
 import { isLightTheme } from '../hooks/appearance';
 import { Smile, BarChart3, ImagePlus, SendHorizontal, Zap, CornerUpLeft, X, Search, Bold, Italic, Underline, Strikethrough, Code, AtSign } from 'lucide-react';
@@ -16,6 +17,11 @@ const PUBLIC_COMMANDS = [
   { cmd: '/rimbaud indice', desc: 'Révèle un mot (-1 pt)' },
   { cmd: '/scores', desc: 'Classement du jeu Rimbaud' },
   { cmd: '/sondage', desc: 'Crée un sondage', example: '/sondage Pizza ou sushi ? | Pizza | Sushi' },
+  { cmd: '/pendu', desc: 'Jeu du pendu (mots de Rimbaud)' },
+  { cmd: '/pendu stop', desc: 'Arrête le pendu en cours' },
+  { cmd: '/rappel', desc: 'Rappel : 10m, 2h, 18:30, demain 9h…', example: '/rappel 10m Sortir le linge' },
+  { cmd: '/rappels', desc: 'Liste de tes rappels' },
+  { cmd: '/poeme', desc: 'Lire un poème de Rimbaud (titre facultatif)', action: 'poem' },
 ];
 const ADMIN_COMMANDS = [
   { cmd: '/filtre', desc: 'Filtre anti-insultes', example: '/filtre autoriser mot' },
@@ -117,6 +123,7 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
 
   const pickCommand = (c) => {
     if (c.action === 'picker') { setText(''); openRimbaudPicker(); return; }
+    if (c.action === 'poem') { setText(''); openPoem(''); return; }
     setText(c.example ? c.example.split(' ')[0] + ' ' : c.cmd + ' ');
     inputRef.current?.focus();
   };
@@ -159,6 +166,9 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
     if (/^\/rimbaud\s+choisir$/i.test(trimmed)) { setText(''); openRimbaudPicker(); return; }
+    // /poeme opens the reader for you only (nothing is posted in the chat)
+    const poemCmd = /^\/po[eè]me(?:\s+(.*))?$/i.exec(trimmed);
+    if (poemCmd) { setText(''); openPoem(poemCmd[1] || ''); return; }
     onSend({ content: trimmed, type: 'text' });
     setText('');
   };

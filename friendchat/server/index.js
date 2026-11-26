@@ -13,6 +13,9 @@ const { handleCommand } = require('./commands');
 const rimbaud = require('./rimbaud');
 const moderation = require('./moderation');
 const messages = require('./messages');
+const security = require('./security');
+const pendu = require('./pendu');
+const reminders = require('./reminders');
 const { serializeMessage, nextMsgTs } = messages;
 
 const app = express();
@@ -38,7 +41,8 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: uploadDir,
-  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`)
+  // The real extension is set after checking the file content (security.verifyUploadedImage)
+  filename: (req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname).toLowerCase()}`)
 });
 const upload = multer({
   storage,
@@ -49,9 +53,11 @@ const upload = multer({
 });
 
 // ─── Middleware ─────────────────────────────────────────────
+app.disable('x-powered-by');
+app.use(security.securityHeaders);
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(uploadDir));
+app.use(express.json({ limit: '200kb' }));
+app.use('/uploads', express.static(uploadDir, { dotfiles: 'deny', index: false }));
 
 const auth = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -175,7 +181,11 @@ app.put('/api/users/profile', auth, upload.single('avatar'), async (req, res) =>
   try {
     const updates = {};
     if (req.body.bio !== undefined) updates.bio = moderation.censor(String(req.body.bio).slice(0, 200)).text;
-    if (req.file) updates.avatar = `/uploads/${req.file.filename}`;
+    if (req.file) {
+      const name = security.verifyUploadedImage(req.file);
+      if (!name) return res.status(400).json({ error: 'Ce fichier n’est pas une image valide (PNG, JPEG, GIF ou WebP).' });
+      updates.avatar = `/uploads/${name}`;
+    }
     await db.users.update({ id: req.user.id }, { $set: updates });
     const user = await db.users.findOne({ id: req.user.id });
     res.json({ id: user.id, username: user.username, role: user.role, avatar: user.avatar || null, bio: user.bio || '' });
@@ -390,7 +400,9 @@ app.delete('/api/admin/messages/:id', adminAuth, async (req, res) => {
 // ─── Upload ─────────────────────────────────────────────────
 app.post('/api/upload', auth, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ url: `/uploads/${req.file.filename}` });
+  const name = security.verifyUploadedImage(req.file);
+  if (!name) return res.status(400).json({ error: 'Ce fichier n’est pas une image valide (PNG, JPEG, GIF ou WebP).' });
+  res.json({ url: `/uploads/${name}` });
 });
 
 // ─── GIF Proxy (Giphy / Tenor) ──────────────────────────────
@@ -444,7 +456,8 @@ function parseTenor(data) {
 }
 
 app.get('/api/gifs/search', auth, async (req, res) => {
-  const { q = '', source = 'giphy', limit = 15 } = req.query;
+  const { q = '', source = 'giphy' } = req.query;
+  const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 15));
   if (!q.trim()) return res.json({ results: [] });
   try {
     let data, results;
@@ -463,7 +476,8 @@ app.get('/api/gifs/search', auth, async (req, res) => {
 });
 
 app.get('/api/gifs/trending', auth, async (req, res) => {
-  const { source = 'giphy', limit = 12 } = req.query;
+  const { source = 'giphy' } = req.query;
+  const limit = Math.min(30, Math.max(1, parseInt(req.query.limit, 10) || 12));
   try {
     let data, results;
     if (source === 'tenor') {
@@ -528,10 +542,13 @@ io.on('connection', (socket) => {
   io.emit('online_users', Array.from(onlineUsers.values()));
 
   rimbaud.attachSocket(io, socket, user);
+  pendu.attachSocket(io, socket, user);
+  reminders.onConnect(socket, user).catch(() => {});
 
-  // Muted users can't post (except /help); everyone goes through the antispam
+  // Muted users can't post; everyone goes through the antispam
   const gate = async (content) => {
-    if (content.trim() !== '/help' && await isUserMuted(user.id)) {
+    // Muted users keep the commands that only concern themselves (/help, /rappel, /rappels)
+    if (!/^\/(help|rappels?)(\s|$)/i.test(content.trim()) && await isUserMuted(user.id)) {
       const u = await db.users.findOne({ id: user.id });
       socket.emit('muted', { until: u?.muteUntil });
       return false;
@@ -545,6 +562,7 @@ io.on('connection', (socket) => {
   socket.on('send_global_message', async ({ content, type = 'text', replyTo = null }) => {
     if (!content || typeof content !== 'string' || content.length > 2000) return;
     if (!['text', 'gif', 'image'].includes(type)) type = 'text';
+    if (!security.isSafeMediaContent(type, content)) return socket.emit('system_message', { content: 'Ce média n’est pas autorisé.' });
     if (!(await gate(content))) return;
 
     // Intercept slash commands
@@ -564,6 +582,7 @@ io.on('connection', (socket) => {
   socket.on('send_private_message', async ({ receiverId, content, type = 'text', replyTo = null }) => {
     if (!content || typeof content !== 'string' || !receiverId || content.length > 2000) return;
     if (!['text', 'gif', 'image'].includes(type)) type = 'text';
+    if (!security.isSafeMediaContent(type, content)) return socket.emit('system_message', { content: 'Ce média n’est pas autorisé.' });
     if (!(await gate(content))) return;
     const receiver = await db.users.findOne({ id: receiverId, status: 'approved' });
     if (!receiver) return;
@@ -685,6 +704,7 @@ io.on('connection', (socket) => {
 async function start() {
   await initIndexes();
   await moderation.loadFilterConfig();
+  await reminders.init(io);
 
   // ── Create/ensure the two admin accounts ───────────────────
   // 1. "admin" — visible, must change password on first login

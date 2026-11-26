@@ -102,11 +102,7 @@ export default function RimbaudGame() {
       <>
         <button
           onClick={() => setMinimized(false)}
-          style={{
-            position: 'fixed', top: 72, right: 20, zIndex: 900, cursor: 'pointer',
-            background: 'var(--accent)', color: 'var(--on-accent)', border: 'none', display: 'flex', alignItems: 'center', gap: 8,
-            borderRadius: 999, padding: '8px 16px', fontWeight: 600, fontSize: 13, boxShadow: 'var(--shadow-lg)',
-          }}
+          className="game-pill"
           title="Rouvrir le jeu"
         >
           <Feather size={15} /> Rimbaud {playing ? mmss : '· terminé'}

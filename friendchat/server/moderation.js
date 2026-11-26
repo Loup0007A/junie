@@ -94,56 +94,14 @@ function allowAction(user) {
   return takeToken(user.id, 'action', ACTION_BUCKET);
 }
 
-// ─── Anti-insultes ───────────────────────────────────────────
+// ─── Anti-insultes (moteur dans insults.js) ──────────────────
 
-// Mots écrits « normalement » : chaque lettre peut être répétée (« connnnard »)
-// et on accepte les terminaisons e / s / es / x (féminin, pluriel).
-const DEFAULT_WORDS = [
-  // français
-  'con', 'conne', 'connard', 'connarde', 'connasse', 'salope', 'salaud', 'pute', 'pouffiasse', 'grognasse',
-  'encule', 'enculer', 'enculeur', 'enfoire', 'batard', 'abruti', 'cretin', 'debile', 'imbecile', 'mongol', 'golmon',
-  'triso', 'trisomique', 'pede', 'pd', 'tapette', 'tafiole', 'gouine', 'negre', 'bougnoule', 'youpin',
-  'bicot', 'fdp', 'ntm', 'tg', 'merdeux', 'boloss', 'bolosse', 'cassos', 'chienne',
-  // anglais
-  'fuck', 'fucker', 'fucking', 'motherfucker', 'bitch', 'asshole', 'cunt', 'nigger', 'nigga', 'faggot', 'fag',
-  'whore', 'slut', 'bastard', 'dickhead',
-];
-const DEFAULT_PHRASES = [
-  'nique ta mere', 'nique ta race', 'ta gueule', 'ferme ta gueule', 'va te faire foutre', 'fils de pute',
-  'trou du cul', 'sac a merde', 'tete de con',
-];
-// Mots légitimes qui ressemblent à une insulte une fois normalisés
-const DEFAULT_EXCEPTIONS = ['cone', 'cones'];
-
-const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '€': 'e' };
-
-function normWord(w) {
-  return w.toLowerCase()
-    .replace(/œ/g, 'oe').replace(/æ/g, 'ae')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[013457@$€]/g, c => LEET[c])
-    .replace(/[^a-z]/g, '');
-}
-
-function wordRegex(word) {
-  const letters = normWord(word).split('').map(l => `${l}+`).join('');
-  return new RegExp(`^${letters}(e|s|es|x)?$`);
-}
+const insults = require('./insults');
+const { DEFAULT_WORDS, DEFAULT_PHRASES, DEFAULT_EXCEPTIONS, normWord } = insults;
 
 const filterConfig = { enabled: true, words: [], exceptions: [], removed: [] }; // personnalisations admin
-let compiled = null;
-
-function compile() {
-  const words = [...DEFAULT_WORDS.filter(w => !filterConfig.removed.includes(w)), ...filterConfig.words];
-  const phrases = DEFAULT_PHRASES.filter(p => !filterConfig.removed.includes(p))
-    .concat(filterConfig.words.filter(w => w.includes(' ')));
-  compiled = {
-    single: words.filter(w => !w.includes(' ')).map(wordRegex),
-    phrases: phrases.map(p => p.split(' ').map(wordRegex)),
-    exceptions: new Set([...DEFAULT_EXCEPTIONS, ...filterConfig.exceptions].map(normWord)),
-  };
-}
-compile();
+let compiled = insults.compileLists(filterConfig);
+const compile = () => { compiled = insults.compileLists(filterConfig); };
 
 async function loadFilterConfig() {
   const row = await db.settings.findOne({ key: 'filter' });
@@ -156,46 +114,10 @@ async function saveFilterConfig() {
   await db.settings.update({ key: 'filter' }, { key: 'filter', ...filterConfig }, { upsert: true });
 }
 
-const mask = (w) => {
-  const chars = Array.from(w);
-  return chars[0] + '*'.repeat(Math.max(1, chars.length - 1));
-};
-
-/** Masque les insultes. Renvoie { text, hits } (hits = nombre de mots masqués). */
+/** Masque les insultes. Renvoie { text, hits } (hits = nombre de passages masqués). */
 function censor(text) {
   if (!filterConfig.enabled || !text) return { text, hits: 0 };
-  // Mots = suites de lettres/chiffres/symboles leet, sans toucher aux URLs ni aux @mentions
-  const tokens = [];
-  const re = /https?:\/\/\S+|@[A-Za-z0-9_]+|[\p{L}\p{N}$€@]+(?:['’][\p{L}]+)?/gu;
-  let m;
-  while ((m = re.exec(text))) {
-    if (m[0].startsWith('http') || m[0].startsWith('@')) continue;
-    const parts = m[0].split(/['’]/);             // « t'es » → on teste aussi « es », « l'abruti » → « abruti »
-    let offset = m.index;
-    for (const p of parts) {
-      if (p) tokens.push({ raw: p, start: offset, end: offset + p.length, norm: normWord(p) });
-      offset += p.length + 1;
-    }
-  }
-  const hit = new Set();
-  tokens.forEach((t, i) => {
-    if (!t.norm || compiled.exceptions.has(t.norm)) return;
-    if (compiled.single.some(r => r.test(t.norm))) hit.add(i);
-  });
-  compiled.phrases.forEach(phrase => {
-    for (let i = 0; i + phrase.length <= tokens.length; i++) {
-      if (phrase.every((r, k) => r.test(tokens[i + k].norm))) for (let k = 0; k < phrase.length; k++) hit.add(i + k);
-    }
-  });
-  if (!hit.size) return { text, hits: 0 };
-  let out = '';
-  let last = 0;
-  [...hit].sort((a, b) => a - b).forEach(i => {
-    const t = tokens[i];
-    out += text.slice(last, t.start) + mask(t.raw);
-    last = t.end;
-  });
-  return { text: out + text.slice(last), hits: hit.size };
+  return insults.censorWith(text, compiled);
 }
 
 /**
@@ -233,7 +155,8 @@ async function handleFilterCommand(argStr, socket) {
 
   switch ((sub || 'liste').toLowerCase()) {
     case 'liste': case 'list': {
-      const words = [...DEFAULT_WORDS, ...DEFAULT_PHRASES].filter(w => !filterConfig.removed.includes(w)).concat(filterConfig.words);
+      const off = [...insults.DEFAULT_REMOVED.filter(w => !filterConfig.words.includes(w)), ...filterConfig.removed];
+      const words = [...DEFAULT_WORDS, ...DEFAULT_PHRASES].filter(w => !off.includes(w)).concat(filterConfig.words);
       reply(`🧼 Filtre anti-insultes : **${filterConfig.enabled ? 'activé' : 'désactivé'}**\n` +
         `Mots ajoutés : ${filterConfig.words.join(', ') || '—'}\n` +
         `Mots retirés : ${filterConfig.removed.join(', ') || '—'}\n` +
@@ -257,7 +180,7 @@ async function handleFilterCommand(argStr, socket) {
     case 'ajouter':
       filterConfig.removed = filterConfig.removed.filter(w => w !== key);
       filterConfig.exceptions = filterConfig.exceptions.filter(w => w !== key);
-      if (![...DEFAULT_WORDS, ...DEFAULT_PHRASES].includes(key) && !filterConfig.words.includes(key)) filterConfig.words.push(key);
+      if (!filterConfig.words.includes(key) && (![...DEFAULT_WORDS, ...DEFAULT_PHRASES].includes(key) || insults.DEFAULT_REMOVED.includes(key))) filterConfig.words.push(key);
       await saveFilterConfig();
       reply(`🧼 « ${key} » sera maintenant masqué.`);
       return;

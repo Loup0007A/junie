@@ -745,3 +745,44 @@ h1, h2, h3, .display { font-family: var(--font-display); letter-spacing: -0.015e
 .auth-subtitle { font-size: 15px; }
 
 textarea.input::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-link { color: var(--accent-light); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+
+/* --- Jeux : colonne à droite (Rimbaud + Pendu) --- */
+.game-dock { display: flex; flex-direction: column; flex-shrink: 0; height: 100%; }
+.game-dock > .rimbaud-panel { flex: 1 1 0; min-height: 0; height: auto; }
+.game-dock > .rimbaud-panel + .rimbaud-panel { border-top: 1px solid var(--border-strong); }
+.game-pill {
+  position: fixed; top: 72px; right: 20px; z-index: 900; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  background: var(--accent); color: var(--on-accent); border: none; border-radius: 999px; padding: 8px 16px;
+  font-family: var(--font-body); font-weight: 700; font-size: 13px; box-shadow: var(--shadow-lg);
+}
+@media (max-width: 1000px) {
+  .game-dock { position: fixed; top: 72px; right: 12px; z-index: 900; height: auto; max-height: calc(100vh - 190px); width: min(360px, calc(100vw - 24px)); gap: 10px; }
+  .game-dock > .rimbaud-panel { position: relative; top: auto; right: auto; width: 100%; max-height: none; flex: 1 1 auto; }
+}
+.pendu-word { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: 0.02em; }
+.pendu-word span { min-width: 18px; text-align: center; border-bottom: 3px solid var(--accent-light); line-height: 1.2; }
+.pendu-word span:not(.blank) { border-bottom-color: transparent; }
+.pendu-keys { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; width: 100%; margin-top: 4px; }
+.pendu-keys button {
+  border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary); border-radius: 7px;
+  padding: 6px 0; font-family: var(--font-display); font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.pendu-keys button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-light); }
+.pendu-keys button.good { background: var(--accent-dim); color: var(--accent-light); border-color: transparent; cursor: default; }
+.pendu-keys button.bad { opacity: 0.35; text-decoration: line-through; cursor: default; }
+
+/* --- Lecteur de poèmes --- */
+.poem-reader { max-width: 560px; }
+.poem-body { max-height: 62vh; overflow-y: auto; padding: 8px 6px; font-family: var(--font-poem); font-size: 17px; line-height: 1.7; }
+.poem-body h2 { font-family: var(--font-poem); font-size: 26px; font-weight: 600; letter-spacing: 0; margin: 4px 0 2px; }
+.poem-date { font-size: 13px; color: var(--text-muted); font-style: italic; margin-bottom: 16px; }
+.poem-body p { margin-bottom: 16px; }
+.poem-sign { text-align: right; font-style: italic; color: var(--text-secondary); margin-top: 8px; }
+
+/* --- Rappels --- */
+.reminder-stack { position: fixed; bottom: 96px; right: 20px; z-index: 1300; display: flex; flex-direction: column; gap: 8px; width: min(340px, calc(100vw - 32px)); }
+.reminder-toast {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 12px 12px 14px; border-radius: 14px;
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg); animation: slideUp 0.2s ease;
+}

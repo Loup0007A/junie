@@ -56,7 +56,12 @@ Un chat privé entre amis — beau, sécurisé, et simple à déployer.
 
 ### 🛡️ Modération automatique
 - **Antispam** : 5 messages d'affilée puis 1 toutes les 1,5 s, 3e message identique en 30 s refusé, max 5 mentions par message. Après 3 avertissements en 1 min → muet automatiquement (2, 5, 15 puis 60 min si ça recommence dans la journée). Les admins sont prévenus.
-- **Anti-insultes** : les insultes (FR + EN, y compris variantes « c0nnaaard », « s@lope », expressions) sont masquées (`c******`) dans les messages, MP, modifications, sondages et bios. 3 messages censurés en 10 min → muet 5 min.
+- **Anti-insultes** : les insultes (FR + EN) sont masquées (`c******`) dans les messages, MP, modifications, sondages, bios et rappels. 3 messages censurés en 10 min → muet 5 min. Contournements détectés :
+  - casse mélangée (`CoNnArD`), accents, lettres répétées (`connnnard`), leet speak (`c0nn4rd`, `s@l0pe`) ;
+  - lettres espacées ou ponctuées (`c o n n a r d`, `c.o.n.n.a.r.d`, `sa-lope`), lettre masquée (`c*nnard`) ;
+  - lettres cyrilliques/grecques identiques, caractères pleine chasse ou « mathématiques », caractères invisibles ;
+  - insultes collées (`tesunconnard`) et ~70 expressions (« nique ta mère », « va te faire foutre », « suicide-toi »…), même avec un mot glissé au milieu.
+  - Vérifié sur 210 000 mots distincts d'œuvres françaises pour limiter les faux positifs (Montmartre, crevé, chienne, tapette à mouches… restent intacts).
 - **Exceptions** gérées par les admins avec `/filtre` :
 
 | Commande | Effet |
@@ -71,6 +76,18 @@ Un chat privé entre amis — beau, sécurisé, et simple à déployer.
 
 Les administrateurs ne sont ni limités par l'antispam ni mutés automatiquement (leurs insultes restent masquées).
 
+### Sécurité
+- Rendu des messages en trois barrières : échappement complet du texte, liens validés (http/https), puis filtre **DOMPurify** à liste blanche
+- **Content-Security-Policy** stricte (aucun script inline ou externe), `nosniff`, anti-iframe, pas de `X-Powered-By`
+- Fichiers envoyés : vrai contenu vérifié (signature PNG/JPEG/GIF/WebP), extension corrigée, servis en bac à sable
+- Messages image/GIF : seules les images du site et les GIF Giphy/Tenor (https) sont acceptés
+
+### Autres jeux et outils
+- **/pendu** : pendu collectif avec ~4 000 mots tirés des poèmes de Rimbaud (l'indice est le titre du poème), clavier cliquable ou clavier physique ; `/pendu mot` pour choisir le mot, `/pendu stop`
+- **/rappel** : `10m`, `2h`, `1h30`, `18:30`, `18h`, `demain 9h`, `3j`… ; notification à l'heure dite, ou à la prochaine connexion ; `/rappels`, `/rappel annuler 2`
+- **/poeme [titre]** (ou bouton livre) : lecteur des 62 poèmes, précédent / suivant / au hasard
+- **Icône du site** : onglet (avec pastille de non-lus), notifications, écran d'accueil iPhone/Android (site installable)
+
 ### 🪶 Jeu Rimbaud — complète le vers
 Ouvert à tous les membres, une partie à la fois dans le chat global.
 
@@ -79,7 +96,7 @@ Ouvert à tous les membres, une partie à la fois dans le chat global.
 | `/rimbaud` | Poème et vers au hasard |
 | `/rimbaud choisir` (ou bouton 🪶 Rimbaud) | Sélecteur : on choisit le poème et on **clique sur le mot** où le vers s'arrête |
 | `/rimbaud <poème> [vers] [mots]` | Ex. `/rimbaud dormeur 14 3` : 14e vers du *Dormeur du val*, 3 premiers mots affichés |
-| `/rimbaud liste` | Poèmes disponibles (19 poèmes, 452 vers) |
+| `/rimbaud liste` | Poèmes disponibles (62 poèmes, 2 470 vers) |
 | `/rimbaud indice` / `/rimbaud stop` | Révèle un mot (-1 pt) / arrête la partie (lanceur ou admin) |
 | `/scores` | Classement |
 
@@ -219,7 +236,11 @@ friendchat/
 │   ├── commands.js          # Commandes « / »
 │   ├── rimbaud.js           # Jeu « complète le vers »
 │   ├── rimbaud-poems.js     # Poèmes de Rimbaud (domaine public)
-│   ├── moderation.js        # Antispam + anti-insultes (/filtre)
+│   ├── moderation.js        # Antispam + réglages du filtre (/filtre)
+│   ├── insults.js           # Moteur anti-insultes
+│   ├── security.js          # En-têtes HTTP, vérification des fichiers et des médias
+│   ├── pendu.js             # Jeu du pendu
+│   ├── reminders.js         # Rappels programmés
 │   ├── messages.js          # Sondages, modification/suppression, recherche
 │   ├── data/                # Fichiers DB (auto-créé au 1er lancement)
 │   ├── uploads/             # Images uploadées

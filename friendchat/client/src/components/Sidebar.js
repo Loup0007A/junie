@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Globe, Shield, Search, Palette, LogOut, X, Camera, KeyRound, Sparkles } from 'lucide-react';
 import { useAuth, useSocket, api } from '../hooks/useContexts';
 import { THEMES } from '../hooks/appearance';
+import { safeMediaSrc } from '../utils/markdown';
 import AppearanceModal from './AppearanceModal';
 import StatusModal, { PRESENCES } from './StatusModal';
 
@@ -19,13 +20,14 @@ function Avatar({ user, size = 36, online, presence }) {
   const color = AVATAR_COLORS[h % AVATAR_COLORS.length];
   const p = presence || (online === undefined ? null : online ? 'online' : 'offline');
   const [broken, setBroken] = useState(false);
-  const showImg = user?.avatar && !broken && !isSystem;
+  const avatarSrc = safeMediaSrc(user?.avatar || '');
+  const showImg = avatarSrc && !broken && !isSystem;
 
   return (
     <div style={{ position: 'relative', flexShrink: 0, width: size, height: size }}>
       {showImg ? (
         <img
-          src={user.avatar.startsWith('/') || user.avatar.startsWith('http') ? user.avatar : `/${user.avatar}`}
+          src={avatarSrc}
           alt=""
           style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', display: 'block' }}
           onError={() => setBroken(true)}
@@ -91,6 +93,7 @@ export default function Sidebar({ activeChat, onSelectChat, unreadCounts, open, 
         {/* Brand */}
         <div style={{ padding: '16px 16px 12px', display: 'flex', alignItems: 'center' }}>
           <div className="brand">
+            <img src="/favicon.svg" alt="" width="26" height="26" style={{ alignSelf: 'center', marginRight: 8, borderRadius: 7 }} />
             FriendChat
             <span className="brand-vowels" aria-hidden="true">
               {THEMES.map(t => <span key={t.id} style={{ color: t.id === 'blanc' ? 'var(--text-primary)' : t.accent }}>{t.letter}</span>)}
