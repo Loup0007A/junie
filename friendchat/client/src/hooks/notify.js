@@ -41,7 +41,47 @@ export async function requestNotifications() {
 export function showNotification(title, body, onClick) {
   if (!notificationsSupported() || Notification.permission !== 'granted' || !document.hidden) return;
   try {
-    const n = new Notification(title, { body: (body || '').slice(0, 160), tag: 'friendchat', renotify: true });
+    const n = new Notification(title, {
+      body: (body || '').slice(0, 160),
+      icon: '/icons/icon-192.png',
+      badge: '/icons/badge-96.png',
+      tag: 'friendchat',
+      renotify: true,
+    });
     n.onclick = () => { window.focus(); onClick && onClick(); n.close(); };
   } catch {}
+}
+
+// Pastille de non-lus sur l'icône de l'onglet (dessinée à la volée)
+let faviconImg = null;
+export function setFaviconBadge(count) {
+  const link = document.getElementById('favicon');
+  if (!link) return;
+  if (!count) { link.href = '/favicon.svg'; return; }
+  const draw = () => {
+    try {
+      const size = 64;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(faviconImg, 0, 0, size, size);
+      ctx.beginPath();
+      ctx.arc(size - 17, 17, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#ef4444';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#0f0d12';
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(count > 9 ? '9+' : String(count), size - 17, 18);
+      link.href = c.toDataURL('image/png');
+    } catch {}
+  };
+  if (faviconImg && faviconImg.complete) return draw();
+  faviconImg = new Image();
+  faviconImg.onload = draw;
+  faviconImg.src = '/icons/icon-192.png';
 }

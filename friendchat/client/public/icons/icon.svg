@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>FriendChat</title>
+  <rect width="512" height="512" rx="112" fill="#0f0d12"/>
+  <path fill="#e3b93c" d="M160 104h192a72 72 0 0 1 72 72v112a72 72 0 0 1-72 72H232l-96 66 18-66h6a72 72 0 0 1-72-72V176a72 72 0 0 1 72-72z"/>
+  <path fill="#0f0d12" fill-rule="evenodd" d="M222 150h68l70 172h-56l-13-32h-70l-13 32h-56zM256 200l-21 54h42z"/>
+</svg>

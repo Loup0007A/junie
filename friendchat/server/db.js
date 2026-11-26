@@ -12,6 +12,7 @@ const db = {
   requests: Datastore.create({ filename: path.join(DATA_DIR, 'requests.db'), autoload: true }),
   scores: Datastore.create({ filename: path.join(DATA_DIR, 'scores.db'), autoload: true }),
   settings: Datastore.create({ filename: path.join(DATA_DIR, 'settings.db'), autoload: true }),
+  reminders: Datastore.create({ filename: path.join(DATA_DIR, 'reminders.db'), autoload: true }),
 };
 
 async function initIndexes() {

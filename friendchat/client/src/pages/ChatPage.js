@@ -6,8 +6,11 @@ import ChatWindow from '../components/ChatWindow';
 import FunEffects from '../components/FunEffects';
 import RimbaudGame from '../components/RimbaudGame';
 import ProfileCard from '../components/ProfileCard';
+import PenduGame from '../components/PenduGame';
+import PoemReader from '../components/PoemReader';
+import { BellRing, X } from 'lucide-react';
 import { mentionsUser } from '../components/MessageBubble';
-import { playPing, showNotification } from '../hooks/notify';
+import { playPing, showNotification, setFaviconBadge } from '../hooks/notify';
 
 // Strip markdown/HTML-ish noise for notification bodies
 const plain = (msg) => msg.type === 'text'
@@ -23,6 +26,7 @@ export default function ChatPage() {
   const [chatClearedTs, setChatClearedTs] = useState(null);
   const [hiddenUnread, setHiddenUnread] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [reminders, setReminders] = useState([]);
   const dnd = user.presence === 'dnd';
   const baseTitle = useRef(document.title);
 
@@ -34,10 +38,13 @@ export default function ChatPage() {
     }).catch(() => {});
   }, []);
 
-  // Tab title badge while the page is in the background
+  // Tab title + favicon badge: messages received in the background and unread private messages
+  const unreadPMs = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
   useEffect(() => {
     document.title = hiddenUnread > 0 ? `(${hiddenUnread}) ${baseTitle.current}` : baseTitle.current;
-  }, [hiddenUnread]);
+    setFaviconBadge(hiddenUnread + unreadPMs);
+  }, [hiddenUnread, unreadPMs]);
+  useEffect(() => () => setFaviconBadge(0), []);
   useEffect(() => {
     const onVisible = () => { if (!document.hidden) setHiddenUnread(0); };
     document.addEventListener('visibilitychange', onVisible);
@@ -70,9 +77,17 @@ export default function ChatPage() {
       }
       if (document.hidden) setHiddenUnread(n => n + 1);
     };
+    // Reminders (/rappel): shown even in "do not disturb" — you asked for them
+    const handleReminder = (r) => {
+      setReminders(prev => [...prev.filter(x => x.id !== r.id), r]);
+      playPing();
+      showNotification('Rappel', r.text);
+    };
+    socket.on('reminder', handleReminder);
     socket.on('new_private_message', handleNewPM);
     socket.on('new_global_message', handleNewGlobal);
     return () => {
+      socket.off('reminder', handleReminder);
       socket.off('new_private_message', handleNewPM);
       socket.off('new_global_message', handleNewGlobal);
     };
@@ -109,7 +124,25 @@ export default function ChatPage() {
       />
       <ProfileCard onMessage={(u) => handleSelectChat(`pm-${u.id}`, u)} />
       <FunEffects onChatCleared={handleChatCleared} />
-      <RimbaudGame />
+      <div className="game-dock">
+        <RimbaudGame />
+        <PenduGame />
+      </div>
+      <PoemReader />
+      {reminders.length > 0 && (
+        <div className="reminder-stack" role="status">
+          {reminders.map(r => (
+            <div key={r.id} className="reminder-toast">
+              <BellRing size={18} style={{ color: 'var(--accent-light)', flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Rappel{r.late ? ' (pendant ton absence)' : ''}</div>
+                <div style={{ fontSize: 14, wordBreak: 'break-word' }}>{r.text}</div>
+              </div>
+              <button className="btn btn-ghost btn-icon" onClick={() => setReminders(prev => prev.filter(x => x.id !== r.id))} aria-label="Fermer le rappel"><X size={16} /></button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

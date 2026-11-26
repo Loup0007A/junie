@@ -8,7 +8,8 @@ import { openRimbaudPicker } from './RimbaudGame';
 import PollModal from './PollModal';
 import { openProfile } from './ProfileCard';
 import { isSoundOn, setSoundOn, notificationPermission, notificationsSupported, requestNotifications } from '../hooks/notify';
-import { Search, Feather, Bell, BellOff, BellRing, Menu, X, Pin, Globe, ArrowDown, MessageCircle } from 'lucide-react';
+import { Search, Feather, Bell, BellOff, BellRing, Menu, X, Pin, Globe, ArrowDown, MessageCircle, BookOpen } from 'lucide-react';
+import { openPoem } from './PoemReader';
 
 // ─── Recherche dans la conversation ─────────────────────────
 function Highlight({ text, query }) {
@@ -93,6 +94,7 @@ function HeaderTools({ isGlobal, onRimbaud, onSearch, searching }) {
           <Feather size={16} /> <span className="hide-mobile">Rimbaud</span>
         </button>
       )}
+      <button className="btn btn-ghost btn-icon" onClick={() => openPoem('')} title="Lire un poème de Rimbaud (/poeme)" aria-label="Lire un poème"><BookOpen size={17} /></button>
       <button className={`btn btn-icon ${searching ? 'btn-secondary' : 'btn-ghost'}`} onClick={onSearch} title="Rechercher (Ctrl+F)" aria-label="Rechercher"><Search size={17} /></button>
       <button
         className="btn btn-ghost btn-icon"

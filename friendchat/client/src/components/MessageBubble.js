@@ -5,12 +5,12 @@ import { Avatar } from './Sidebar';
 import { openProfile } from './ProfileCard';
 import { nameColor } from '../hooks/appearance';
 import { stripEmoji, stripLeadingEmoji } from '../hooks/text';
+import { renderMarkdown, EMOJI_SEQ, safeMediaSrc, safeHttpUrl } from '../utils/markdown';
 import { Reply, Pencil, Trash2, Pin, PinOff, BarChart3, Check, Lock, CornerUpLeft, Play, CheckCheck } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
-const MENTION_RE = /(^|[\s(>])@([A-Za-z0-9_]{3,20})(?![A-Za-z0-9_])/g;
 
 export const stripMarkup = (s) => (s || '').replace(/<[^>]+>/g, '').replace(/[*~`]/g, '').replace(/^> /gm, '');
 
@@ -22,7 +22,6 @@ export function mentionsUser(text, username) {
 
 // ─── Emojis façon WhatsApp ───────────────────────────────────
 // Un emoji = pictogramme (+ variantes, teinte de peau, séquences ZWJ) ou drapeau.
-const EMOJI_SEQ = /(?:\p{Regional_Indicator}{2}|[#*0-9]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\p{Emoji_Modifier})?)*)/gu;
 
 /** Nombre d'emojis si le message ne contient QUE des emojis (sinon 0). */
 export function emojiOnlyCount(text) {
@@ -34,10 +33,7 @@ export function emojiOnlyCount(text) {
 // 1 emoji → très grand, 2 → grand, 3 → moyen (au-delà : bulle normale)
 const JUMBO_SIZES = { 1: 56, 2: 46, 3: 38 };
 
-// Emojis dans le texte : un peu plus gros que les lettres (hors balises HTML)
-function enlargeInlineEmojis(html) {
-  return html.split(/(<[^>]+>)/).map(part => part.startsWith('<') ? part : part.replace(EMOJI_SEQ, '<span class="emoji-inline">$&</span>')).join('');
-}
+
 
 // ─── Aperçus de liens ───────────────────────────────────────
 const YT_RE = /(?:youtube\.com\/(?:watch\?(?:[^\s]*&)?v=|shorts\/|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/;
@@ -62,50 +58,13 @@ function YouTubeEmbed({ id }) {
 function LinkPreview({ text, onOpenImage }) {
   const yt = YT_RE.exec(text);
   if (yt) return <YouTubeEmbed id={yt[1]} />;
-  const img = IMG_URL_RE.exec(text);
+  const m = IMG_URL_RE.exec(text);
+  const img = m && safeHttpUrl(m[0]) && m[0].startsWith('https://') ? m : null;
   if (img) return <img className="embed-img" src={img[0]} alt="" loading="lazy" onClick={() => onOpenImage(img[0])} onError={e => { e.currentTarget.style.display = 'none'; }} />;
   return null;
 }
 
-// Parse inline markdown to HTML (manual, lightweight)
-function parseMarkdown(text, myUsername) {
-  if (!text) return '';
-  let html = text
-    // HTML color tags passthrough (our custom color)
-    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    // Restore our custom tags
-    .replace(/&lt;u&gt;/g, '<u>').replace(/&lt;\/u&gt;/g, '</u>')
-    .replace(/&lt;span class="color-red"&gt;/g, '<span class="color-red">')
-    .replace(/&lt;span class="color-green"&gt;/g, '<span class="color-green">')
-    .replace(/&lt;span class="color-blue"&gt;/g, '<span class="color-blue">')
-    .replace(/&lt;span class="color-purple"&gt;/g, '<span class="color-purple">')
-    .replace(/&lt;span class="color-yellow"&gt;/g, '<span class="color-yellow">')
-    .replace(/&lt;span class="color-orange"&gt;/g, '<span class="color-orange">')
-    .replace(/&lt;span class="color-pink"&gt;/g, '<span class="color-pink">')
-    .replace(/&lt;\/span&gt;/g, '</span>')
-    // Code block
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    // Inline code
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Bold
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Italic
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    // Strikethrough
-    .replace(/~~([^~]+)~~/g, '<s>$1</s>')
-    // Blockquote
-    .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-    // URLs
-    .replace(/https?:\/\/[^\s<>"]+/g, url => `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent-light)">${url}</a>`)
-    // @mentions
-    .replace(MENTION_RE, (m, pre, name) => {
-      const me = myUsername && name.toLowerCase() === myUsername.toLowerCase();
-      return `${pre}<span class="mention${me ? ' mention-me' : ''}">@${name}</span>`;
-    })
-    // Newlines
-    .replace(/\n/g, '<br/>');
-  return enlargeInlineEmojis(html);
-}
+
 
 function formatTimestamp(ts) {
   const date = new Date(ts);
@@ -258,22 +217,24 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
               <PollCard message={message} isOwn={isOwn} onVote={onVote} onClose={onClosePoll} />
             ) : editing ? (
               <EditBox initial={message.content} onSave={(v) => onSaveEdit && onSaveEdit(message.id, v)} onCancel={() => onCancelEdit && onCancelEdit()} />
+            ) : (message.type === 'gif' || message.type === 'image') && !safeMediaSrc(message.content) ? (
+              <div className="bubble" style={{ padding: '8px 12px', borderRadius: 12, background: 'var(--bg-elevated)', color: 'var(--text-muted)', fontStyle: 'italic' }}>Média bloqué (adresse non autorisée)</div>
             ) : message.type === 'gif' ? (
               <img
-                src={message.content}
+                src={safeMediaSrc(message.content)}
                 alt="GIF"
                 className="msg-gif"
                 loading="lazy"
-                onClick={() => setImgModal(message.content)}
+                onClick={() => setImgModal(safeMediaSrc(message.content))}
                 style={{ cursor: 'pointer', maxWidth: 280, borderRadius: 10 }}
               />
             ) : message.type === 'image' ? (
               <img
-                src={message.content}
+                src={safeMediaSrc(message.content)}
                 alt="Image"
                 className="msg-image"
                 loading="lazy"
-                onClick={() => setImgModal(message.content)}
+                onClick={() => setImgModal(safeMediaSrc(message.content))}
               />
             ) : jumbo ? (
               <div className="jumbo-emoji" style={{ fontSize: jumbo }} aria-label={message.content}>{message.content}</div>
@@ -289,7 +250,7 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
                   border: isOwn ? 'none' : '1px solid var(--border)'
                 }}
                 className={`md-content bubble${isOwn ? ' bubble-own' : ''}${mentionsMe ? ' msg-mentions-me' : ''}`}
-                dangerouslySetInnerHTML={{ __html: parseMarkdown(isSystem ? stripLeadingEmoji(message.content) : message.content, user?.username) }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(isSystem ? stripLeadingEmoji(message.content) : message.content, user?.username) }}
               />
             )}
             {hasLink && !editing && <LinkPreview text={message.content} onOpenImage={setImgModal} />}

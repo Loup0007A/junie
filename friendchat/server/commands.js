@@ -7,6 +7,8 @@
 const { handleRimbaudCommand, leaderboard } = require('./rimbaud');
 const { handleFilterCommand } = require('./moderation');
 const { parsePollCommand, createPoll } = require('./messages');
+const { handlePenduCommand } = require('./pendu');
+const { handleReminderCommand } = require('./reminders');
 
 const SYSTEM_SENDER = { id: 'system', name: '🤖 Système' };
 
@@ -20,6 +22,9 @@ const PUBLIC_COMMANDS = [
   { cmd: '/rimbaud indice | stop', desc: 'Révèle un mot (-1 pt) / arrête la partie' },
   { cmd: '/scores', desc: 'Classement du jeu Rimbaud' },
   { cmd: '/sondage Question ? | choix 1 | choix 2', desc: 'Crée un sondage (« /sondage multi … » pour plusieurs choix possibles)' },
+  { cmd: '/pendu', desc: 'Jeu du pendu avec un mot tiré des poèmes de Rimbaud (« /pendu mot » pour choisir le mot, « /pendu stop »)' },
+  { cmd: '/rappel 10m texte', desc: 'Rappel programmé : 10m, 2h, 18:30, demain 9h… (« /rappels » pour la liste)' },
+  { cmd: '/poeme [titre]', desc: 'Lire un poème de Rimbaud (au hasard ou par son nom)' },
 ];
 
 // Liste des commandes disponibles, affichée par /help
@@ -114,6 +119,16 @@ function handleCommand(content, user, io, socket) {
         sender_name: '🪶 Rimbaud', content, type: 'text', created_at: Date.now(), avatar: null
       });
     }).catch(() => socket.emit('system_message', { content: 'Impossible de charger le classement.' }));
+    return true;
+  }
+
+  if (cmd === '/pendu') {
+    handlePenduCommand(argStr, user, io, socket);
+    return true;
+  }
+
+  if (cmd === '/rappel' || cmd === '/rappels') {
+    handleReminderCommand(cmd, argStr, user, socket).catch(() => socket.emit('system_message', { content: 'Impossible d’enregistrer le rappel.' }));
     return true;
   }
 

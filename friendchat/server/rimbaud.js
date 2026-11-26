@@ -333,7 +333,7 @@ function handleRimbaudCommand(args, user, io, socket) {
     return;
   }
   if (sub === 'liste' || sub === 'list') {
-    reply('📜 Poèmes disponibles :\n' + POEMS.map(p => `**${p.id}** — ${p.title} (${p.stanzas.flat().length} vers)`).join('\n') +
+    reply(`Poèmes disponibles (${POEMS.length}) : ` + POEMS.map(p => p.id).join(', ') +
       '\n\nExemple : /rimbaud dormeur 7 3 → 7e vers du Dormeur du val, 3 premiers mots affichés.\nOu /rimbaud choisir pour cliquer directement sur le mot.');
     return;
   }
