@@ -11,7 +11,7 @@ import { playPing, showNotification } from '../hooks/notify';
 // Strip markdown/HTML-ish noise for notification bodies
 const plain = (msg) => msg.type === 'text'
   ? msg.content.replace(/<[^>]+>/g, '').replace(/[*~`>]/g, '')
-  : msg.type === 'gif' ? '🎞️ GIF' : '📸 Image';
+  : msg.type === 'gif' ? '🎞️ GIF' : msg.type === 'poll' ? `📊 Sondage : ${msg.content}` : '📸 Image';
 
 export default function ChatPage() {
   const { socket } = useSocket();

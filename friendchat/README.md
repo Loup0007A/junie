@@ -31,6 +31,27 @@ Un chat privé entre amis — beau, sécurisé, et simple à déployer.
 - ↩️ **Répondre à un message** : la citation s'affiche au-dessus de la réponse, un clic ramène au message d'origine
 - 📣 **Mentions `@pseudo`** avec autocomplétion (Tab/Entrée), surlignage des messages qui vous mentionnent, son 🔔 et notification navigateur (bouton « Activer les notifications » dans l'en-tête), compteur de non-lus dans l'onglet
 
+- ✏️ **Modifier / supprimer ses messages** (survol → ✏️ / 🗑, ou **↑** dans la zone de saisie vide pour modifier son dernier message) ; mention « (modifié) »
+- 📊 **Sondages** : bouton 📊 ou `/sondage Question ? | choix 1 | choix 2` (`/sondage multi …` pour plusieurs choix), votes en direct, clôture par le créateur ou un admin
+- 🔍 **Recherche** dans la conversation ouverte (bouton 🔍 ou Ctrl+F), résultats surlignés, clic pour y aller
+
+### 🛡️ Modération automatique
+- **Antispam** : 5 messages d'affilée puis 1 toutes les 1,5 s, 3e message identique en 30 s refusé, max 5 mentions par message. Après 3 avertissements en 1 min → muet automatiquement (2, 5, 15 puis 60 min si ça recommence dans la journée). Les admins sont prévenus.
+- **Anti-insultes** : les insultes (FR + EN, y compris variantes « c0nnaaard », « s@lope », expressions) sont masquées (`c******`) dans les messages, MP, modifications, sondages et bios. 3 messages censurés en 10 min → muet 5 min.
+- **Exceptions** gérées par les admins avec `/filtre` :
+
+| Commande | Effet |
+|----------|-------|
+| `/filtre liste` | État du filtre, mots ajoutés/retirés, exceptions |
+| `/filtre autoriser <mot>` | Exception : ce mot ne sera jamais masqué |
+| `/filtre interdire <mot>` | Retire une exception |
+| `/filtre ajouter <mot ou expression>` | Masque un nouveau mot |
+| `/filtre retirer <mot>` | Ne masque plus ce mot |
+| `/filtre test <texte>` | Montre ce qui serait masqué |
+| `/filtre on` / `off` | Active / désactive le filtre |
+
+Les administrateurs ne sont ni limités par l'antispam ni mutés automatiquement (leurs insultes restent masquées).
+
 ### 🪶 Jeu Rimbaud — complète le vers
 Ouvert à tous les membres, une partie à la fois dans le chat global.
 
@@ -45,6 +66,7 @@ Ouvert à tous les membres, une partie à la fois dans le chat global.
 
 - Réponse dans le panneau du jeu **ou directement dans le chat** ; accents, majuscules et ponctuation ignorés, petites fautes de frappe tolérées (mot par mot)
 - 3 points par vers trouvé, -1 par indice (minimum 1) ; minuteur de 1 à 5 min
+- **Un seul indice par personne et par partie** (le créateur de la partie peut en donner autant qu'il veut)
 - Celui qui choisit le vers ne peut pas répondre à cette manche
 - Textes : *Poésies* d'Arthur Rimbaud (domaine public), fichier `server/rimbaud-poems.js`
 
@@ -178,6 +200,8 @@ friendchat/
 │   ├── commands.js          # Commandes « / »
 │   ├── rimbaud.js           # Jeu « complète le vers »
 │   ├── rimbaud-poems.js     # Poèmes de Rimbaud (domaine public)
+│   ├── moderation.js        # Antispam + anti-insultes (/filtre)
+│   ├── messages.js          # Sondages, modification/suppression, recherche
 │   ├── data/                # Fichiers DB (auto-créé au 1er lancement)
 │   ├── uploads/             # Images uploadées
 │   ├── package.json
@@ -199,7 +223,8 @@ friendchat/
 │   │   │   ├── MessageBubble.js # Rendu des messages (réactions, réponses, mentions)
 │   │   │   ├── MessageInput.js  # Saisie + emoji + GIF + upload + @mentions
 │   │   │   ├── RimbaudGame.js   # Panneau du jeu Rimbaud
-│   │   │   └── RimbaudPicker.js # Sélecteur poème / coupure
+│   │   │   ├── RimbaudPicker.js # Sélecteur poème / coupure
+│   │   │   └── PollModal.js     # Création de sondage
 │   │   └── styles/
 │   │       └── global.css
 │   ├── public/

@@ -133,7 +133,7 @@ function SystemToast({ content, onDone }) {
   return (
     <div style={{ position:'fixed', bottom:90, left:'50%', transform:'translateX(-50%)', zIndex:10000, maxWidth:460, width:'90vw', animation:'fc-drop .25s ease' }}>
       <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--accent)', borderRadius:12, padding:'12px 18px', boxShadow:'var(--shadow-lg)', fontSize:13, lineHeight:1.65, whiteSpace:'pre-line', color:'var(--text-primary)' }}>
-        <span style={{ fontSize:15, fontWeight:600, color:'var(--accent-light)' }}>💻 Commande</span>
+        <span style={{ fontSize:15, fontWeight:600, color:'var(--accent-light)' }}>🤖 Système</span>
         <div style={{ marginTop:6 }}>{content}</div>
         <button onClick={onDone} style={{ marginTop:8, fontSize:11, color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer' }}>Fermer</button>
       </div>
@@ -163,6 +163,8 @@ export default function FunEffects({ onChatCleared }) {
       fx_disco: () => setDisco(true),
       announcement: ({ text, by }) => setAnnouncement({ text, by }),
       system_message: ({ content }) => setSystemMsg(content),
+      muted: ({ until } = {}) => setSystemMsg(`🔇 Tu es muet(te)${until ? ` jusqu'à ${new Date(until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''} : ton message n'a pas été envoyé.`),
+      account_muted: ({ until, auto, reason } = {}) => setSystemMsg(`🔇 ${auto ? `Mute automatique (${reason})` : 'Un admin t\'a rendu muet(te)'}${until ? ` jusqu'à ${new Date(until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}.`),
       chat_cleared: ({ by }) => { onChatCleared && onChatCleared(by); setSystemMsg(`🧹 Le chat a été effacé par ${by}`); },
     };
     Object.entries(h).forEach(([e, fn]) => socket.on(e, fn));

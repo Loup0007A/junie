@@ -11,6 +11,9 @@ const { v4: uuidv4 } = require('uuid');
 const { db, initIndexes } = require('./db');
 const { handleCommand } = require('./commands');
 const rimbaud = require('./rimbaud');
+const moderation = require('./moderation');
+const messages = require('./messages');
+const { serializeMessage, nextMsgTs } = messages;
 
 const app = express();
 const server = http.createServer(app);
@@ -149,7 +152,7 @@ app.post('/api/users/change-password', auth, async (req, res) => {
 app.put('/api/users/profile', auth, upload.single('avatar'), async (req, res) => {
   try {
     const updates = {};
-    if (req.body.bio !== undefined) updates.bio = req.body.bio.slice(0, 200);
+    if (req.body.bio !== undefined) updates.bio = moderation.censor(String(req.body.bio).slice(0, 200)).text;
     if (req.file) updates.avatar = `/uploads/${req.file.filename}`;
     await db.users.update({ id: req.user.id }, { $set: updates });
     const user = await db.users.findOne({ id: req.user.id });
@@ -161,31 +164,12 @@ app.put('/api/users/profile', auth, upload.single('avatar'), async (req, res) =>
 const HISTORY_LIMIT = 150;
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
 
-// Strictly increasing timestamps so messages sent in the same millisecond keep their order
-let lastMsgTs = 0;
-const nextMsgTs = () => (lastMsgTs = Math.max(Date.now(), lastMsgTs + 1));
-
-// Shape shared by REST history and live socket events
-function serializeMessage(m, avatar = null) {
-  const out = {
-    id: m.id, sender_id: m.senderId, sender_name: m.senderName,
-    content: m.content, type: m.type || 'text', created_at: m.createdAt,
-    deleted: m.deleted || false, avatar,
-    reactions: m.reactions || {},
-    reply_to: m.replyTo || null,
-  };
-  if (m.room) out.room = m.room;
-  if (m.receiverId) { out.receiver_id = m.receiverId; out.read = m.read || false; }
-  return out;
-}
-
 // Small snapshot of the message being replied to (kept even if the original is later deleted)
 async function buildReplySnapshot(store, replyToId, filter = {}) {
   if (!replyToId || typeof replyToId !== 'string') return null;
   const orig = await store.findOne({ id: replyToId, deleted: { $ne: true }, ...filter });
   if (!orig) return null;
-  const excerpt = orig.type === 'text' ? orig.content.slice(0, 140) : (orig.type === 'gif' ? '🎞️ GIF' : '📸 Image');
-  return { id: orig.id, sender_name: orig.senderName, excerpt, type: orig.type || 'text' };
+  return { id: orig.id, sender_name: orig.senderName, excerpt: messages.excerptOf(orig), type: orig.type || 'text' };
 }
 
 async function avatarMapFor(msgs) {
@@ -229,6 +213,12 @@ app.get('/api/messages/unread', auth, async (req, res) => {
     msgs.forEach(m => counts[m.senderId] = (counts[m.senderId] || 0) + 1);
     res.json(Object.entries(counts).map(([sender_id, count]) => ({ sender_id, count })));
   } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// Recherche dans le chat global (with=global) ou dans une conversation privée (with=<userId>)
+app.get('/api/messages/search', auth, async (req, res) => {
+  try { res.json(await messages.searchMessages(req.user, req.query.q, req.query.with)); }
+  catch { res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─── Jeu Rimbaud ────────────────────────────────────────────
@@ -484,32 +474,45 @@ io.on('connection', (socket) => {
 
   rimbaud.attachSocket(io, socket, user);
 
+  // Muted users can't post (except /help); everyone goes through the antispam
+  const gate = async (content) => {
+    if (content.trim() !== '/help' && await isUserMuted(user.id)) {
+      const u = await db.users.findOne({ id: user.id });
+      socket.emit('muted', { until: u?.muteUntil });
+      return false;
+    }
+    const spam = await moderation.checkSpam(io, user, content);
+    if (!spam.ok) { socket.emit('system_message', { content: spam.message }); return false; }
+    return true;
+  };
+  const filterText = (text) => moderation.filterUserText(io, socket, user, text);
+
   socket.on('send_global_message', async ({ content, type = 'text', replyTo = null }) => {
     if (!content || typeof content !== 'string' || content.length > 2000) return;
     if (!['text', 'gif', 'image'].includes(type)) type = 'text';
+    if (!(await gate(content))) return;
 
-    // Intercept slash commands (admin fun commands)
+    // Intercept slash commands
     if (type === 'text' && handleCommand(content, user, io, socket)) return;
 
-    if (await isUserMuted(user.id)) {
-      const u = await db.users.findOne({ id: user.id });
-      return socket.emit('muted', { until: u?.muteUntil });
-    }
+    const raw = content;
+    if (type === 'text') content = await filterText(content);
     const reply = await buildReplySnapshot(db.messages, replyTo, { room: 'global' });
     const msg = { id: uuidv4(), room: 'global', senderId: user.id, senderName: user.username, content, type, createdAt: nextMsgTs(), reactions: {}, replyTo: reply };
     await db.messages.insert(msg);
     io.to('global').emit('new_global_message', serializeMessage(msg, user.avatar || null));
 
     // A correct answer typed in the chat also wins the Rimbaud game
-    if (type === 'text') rimbaud.checkChatMessage(io, user, content);
+    if (type === 'text') rimbaud.checkChatMessage(io, user, raw);
   });
 
   socket.on('send_private_message', async ({ receiverId, content, type = 'text', replyTo = null }) => {
     if (!content || typeof content !== 'string' || !receiverId || content.length > 2000) return;
     if (!['text', 'gif', 'image'].includes(type)) type = 'text';
-    if (await isUserMuted(user.id)) return socket.emit('muted', {});
+    if (!(await gate(content))) return;
     const receiver = await db.users.findOne({ id: receiverId, status: 'approved' });
     if (!receiver) return;
+    if (type === 'text') content = await filterText(content);
     const reply = await buildReplySnapshot(db.privateMessages, replyTo, {
       $or: [{ senderId: user.id, receiverId }, { senderId: receiverId, receiverId: user.id }]
     });
@@ -523,6 +526,7 @@ io.on('connection', (socket) => {
   // Emoji reactions (toggle) on global or private messages
   socket.on('toggle_reaction', async ({ messageId, emoji, scope = 'global' }) => {
     if (typeof messageId !== 'string' || !REACTION_EMOJIS.includes(emoji)) return;
+    if (!moderation.allowAction(user)) return;
     const isPrivate = scope === 'private';
     const store = isPrivate ? db.privateMessages : db.messages;
     const filter = isPrivate
@@ -543,6 +547,29 @@ io.on('connection', (socket) => {
       io.to('global').emit('message_reactions', payload);
     }
   });
+
+  // Edit / delete your own messages
+  const replyError = (r) => { if (r && r.error) socket.emit('system_message', { content: r.error }); };
+  socket.on('edit_message', async (data = {}) => {
+    if (!moderation.allowAction(user)) return;
+    if (await isUserMuted(user.id)) return socket.emit('muted', {});
+    replyError(await messages.editMessage(io, user, data, filterText));
+  });
+  socket.on('delete_own_message', async (data = {}) => {
+    if (!moderation.allowAction(user)) return;
+    replyError(await messages.deleteOwnMessage(io, user, data));
+  });
+
+  // Polls
+  socket.on('create_poll', async (data = {}) => {
+    if (!(await gate(String(data.question || '')))) return;
+    replyError(await messages.createPoll(io, user, data));
+  });
+  socket.on('poll_vote', async (data = {}) => {
+    if (!moderation.allowAction(user)) return;
+    await messages.votePoll(io, user, data);
+  });
+  socket.on('poll_close', async (data = {}) => replyError(await messages.closePoll(io, user, data)));
 
   socket.on('typing', ({ room, receiverId }) => {
     if (room === 'global') socket.to('global').emit('user_typing', { userId: user.id, username: user.username, room: 'global' });
@@ -569,6 +596,7 @@ io.on('connection', (socket) => {
 // ─── Start ──────────────────────────────────────────────────
 async function start() {
   await initIndexes();
+  await moderation.loadFilterConfig();
 
   // ── Create/ensure the two admin accounts ───────────────────
   // 1. "admin" — visible, must change password on first login

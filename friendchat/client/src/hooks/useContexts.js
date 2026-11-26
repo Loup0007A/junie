@@ -62,7 +62,7 @@ export function AuthProvider({ children }) {
 }
 
 export function SocketProvider({ children }) {
-  const { token, user, logout } = useAuth();
+  const { token, user, logout, updateUser } = useAuth();
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
 
@@ -88,16 +88,19 @@ export function SocketProvider({ children }) {
       alert('Votre compte a été banni.');
       logout();
     });
-    s.on('account_muted', ({ until }) => {
-      // Refresh user state
-      api.get('/api/auth/me').catch(() => {});
-    });
-    s.on('account_unmuted', () => {
-      api.get('/api/auth/me').catch(() => {});
-    });
+    // Keep the mute banner in sync (manual mute by an admin or automatic antispam/insult mute)
+    let unmuteTimer = null;
+    const setMuted = (until) => {
+      clearTimeout(unmuteTimer);
+      updateUser({ muted: true, mute_until: until || null });
+      if (until) unmuteTimer = setTimeout(() => updateUser({ muted: false, mute_until: null }), Math.max(0, until - Date.now()) + 500);
+    };
+    s.on('account_muted', ({ until }) => setMuted(until));
+    s.on('muted', ({ until } = {}) => { if (until) setMuted(until); });
+    s.on('account_unmuted', () => { clearTimeout(unmuteTimer); updateUser({ muted: false, mute_until: null }); });
 
     setSocket(s);
-    return () => { s.disconnect(); setSocket(null); };
+    return () => { clearTimeout(unmuteTimer); s.disconnect(); setSocket(null); };
   }, [token, user?.id]);
 
   return (

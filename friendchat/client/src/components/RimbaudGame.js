@@ -92,6 +92,7 @@ export default function RimbaudGame() {
   const iKnowIt = game.chosen && game.starterId === user.id;
   const canStop = playing && (game.starterId === user.id || user.role === 'admin');
   const hintsLeft = game.hiddenCount - 1 - game.hintWords.length;
+  const iUsedMyHint = game.starterId !== user.id && (game.hintsBy || []).includes(user.username);
   const mmss = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`;
 
   if (minimized) {
@@ -187,8 +188,13 @@ export default function RimbaudGame() {
                 </form>
               )}
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => socket?.emit('rimbaud_hint')} disabled={hintsLeft <= 0} title="Révèle le mot suivant (-1 point)">
-                  💡 Indice
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => socket?.emit('rimbaud_hint')}
+                  disabled={hintsLeft <= 0 || iUsedMyHint}
+                  title={iUsedMyHint ? 'Tu as déjà utilisé ton indice (un seul par personne)' : game.starterId === user.id ? 'Révèle le mot suivant (-1 point) — illimité pour le créateur' : 'Révèle le mot suivant (-1 point) — un seul indice par personne'}
+                >
+                  💡 {iUsedMyHint ? 'Indice utilisé' : 'Indice'}
                 </button>
                 {canStop && (
                   <button className="btn btn-danger btn-sm" onClick={() => socket?.emit('rimbaud_stop')} title="Arrête la partie et révèle la réponse">

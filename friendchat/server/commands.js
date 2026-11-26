@@ -5,6 +5,8 @@
 // ─────────────────────────────────────────────────────────────
 
 const { handleRimbaudCommand, leaderboard } = require('./rimbaud');
+const { handleFilterCommand } = require('./moderation');
+const { parsePollCommand, createPoll } = require('./messages');
 
 const SYSTEM_SENDER = { id: 'system', name: '🤖 Système' };
 
@@ -17,10 +19,12 @@ const PUBLIC_COMMANDS = [
   { cmd: '/rimbaud liste', desc: 'Liste des poèmes disponibles' },
   { cmd: '/rimbaud indice | stop', desc: 'Révèle un mot (-1 pt) / arrête la partie' },
   { cmd: '/scores', desc: 'Classement du jeu Rimbaud' },
+  { cmd: '/sondage Question ? | choix 1 | choix 2', desc: 'Crée un sondage (« /sondage multi … » pour plusieurs choix possibles)' },
 ];
 
 // Liste des commandes disponibles, affichée par /help
 const COMMAND_LIST = [
+  { cmd: '/filtre', desc: 'Filtre anti-insultes : liste | ajouter | retirer | autoriser | interdire <mot> | test | on | off' },
   { cmd: '/clear', desc: 'Efface tous les messages du chat global (visuellement)' },
   { cmd: '/announce <texte>', desc: 'Envoie une annonce stylée à tout le monde' },
   { cmd: '/shake', desc: 'Fait trembler l\'écran de tous les membres' },
@@ -113,6 +117,13 @@ function handleCommand(content, user, io, socket) {
     return true;
   }
 
+  if (cmd === '/sondage') {
+    createPoll(io, user, parsePollCommand(argStr))
+      .then(r => { if (r.error) socket.emit('system_message', { content: r.error }); })
+      .catch(() => socket.emit('system_message', { content: 'Impossible de créer le sondage.' }));
+    return true;
+  }
+
   // All other commands require admin
   if (user.role !== 'admin') {
     socket.emit('system_message', { content: `🚫 La commande ${cmd} est réservée aux administrateurs.` });
@@ -120,6 +131,11 @@ function handleCommand(content, user, io, socket) {
   }
 
   switch (cmd) {
+    case '/filtre': {
+      handleFilterCommand(argStr, socket).catch(() => socket.emit('system_message', { content: 'Erreur du filtre.' }));
+      return true;
+    }
+
     case '/clear': {
       io.to('global').emit('chat_cleared', { by: user.username });
       return true;
