@@ -1,13 +1,26 @@
 // ─────────────────────────────────────────────────────────────
-//  Commandes admin "/" — petits effets rigolos pour égayer le chat
-//  Toutes les commandes sont réservées aux administrateurs.
+//  Commandes "/" — petits effets rigolos pour égayer le chat
+//  Les jeux (/rimbaud, /scores) sont ouverts à tous ;
+//  les autres commandes sont réservées aux administrateurs.
 // ─────────────────────────────────────────────────────────────
+
+const { handleRimbaudCommand, leaderboard } = require('./rimbaud');
 
 const SYSTEM_SENDER = { id: 'system', name: '🤖 Système' };
 
+// Commandes accessibles à tous les membres
+const PUBLIC_COMMANDS = [
+  { cmd: '/help', desc: 'Affiche la liste des commandes' },
+  { cmd: '/rimbaud', desc: 'Jeu : complète un vers de Rimbaud (vers au hasard)' },
+  { cmd: '/rimbaud choisir', desc: 'Choisis toi-même le poème et l\'endroit où le vers s\'arrête' },
+  { cmd: '/rimbaud <poème> [vers] [mots]', desc: 'Partie choisie en texte, ex : /rimbaud dormeur 7 3' },
+  { cmd: '/rimbaud liste', desc: 'Liste des poèmes disponibles' },
+  { cmd: '/rimbaud indice | stop', desc: 'Révèle un mot (-1 pt) / arrête la partie' },
+  { cmd: '/scores', desc: 'Classement du jeu Rimbaud' },
+];
+
 // Liste des commandes disponibles, affichée par /help
 const COMMAND_LIST = [
-  { cmd: '/help', desc: 'Affiche la liste des commandes' },
   { cmd: '/clear', desc: 'Efface tous les messages du chat global (visuellement)' },
   { cmd: '/announce <texte>', desc: 'Envoie une annonce stylée à tout le monde' },
   { cmd: '/shake', desc: 'Fait trembler l\'écran de tous les membres' },
@@ -74,11 +87,29 @@ function handleCommand(content, user, io, socket) {
   // /help is available to everyone
   if (cmd === '/help') {
     const isAdmin = user.role === 'admin';
-    const list = isAdmin ? COMMAND_LIST : COMMAND_LIST.slice(0, 1);
-    const text = isAdmin
-      ? 'Commandes admin disponibles :\n' + COMMAND_LIST.map(c => `**${c.cmd}** — ${c.desc}`).join('\n')
-      : 'Seuls les administrateurs peuvent utiliser des commandes spéciales.';
+    let text = 'Commandes pour tout le monde :\n' + PUBLIC_COMMANDS.map(c => `**${c.cmd}** — ${c.desc}`).join('\n');
+    if (isAdmin) text += '\n\nCommandes admin :\n' + COMMAND_LIST.map(c => `**${c.cmd}** — ${c.desc}`).join('\n');
     socket.emit('system_message', { content: text });
+    return true;
+  }
+
+  // Jeu Rimbaud — ouvert à tous
+  if (cmd === '/rimbaud') {
+    handleRimbaudCommand(rest, user, io, socket);
+    return true;
+  }
+
+  if (cmd === '/scores') {
+    leaderboard(10).then(rows => {
+      const medals = ['🥇', '🥈', '🥉'];
+      const content = rows.length
+        ? '🏆 **Classement Rimbaud**\n' + rows.map((r, i) => `${medals[i] || `${i + 1}.`} **${r.username}** — ${r.points} pt${r.points > 1 ? 's' : ''} (${r.wins} vers trouvé${r.wins > 1 ? 's' : ''})`).join('\n')
+        : 'Personne n’a encore marqué de point. Lance une partie avec /rimbaud !';
+      io.to('global').emit('new_global_message', {
+        id: `sys-${Date.now()}`, room: 'global', sender_id: 'system',
+        sender_name: '🪶 Rimbaud', content, type: 'text', created_at: Date.now(), avatar: null
+      });
+    }).catch(() => socket.emit('system_message', { content: 'Impossible de charger le classement.' }));
     return true;
   }
 
@@ -215,4 +246,4 @@ function handleCommand(content, user, io, socket) {
   }
 }
 
-module.exports = { handleCommand, COMMAND_LIST };
+module.exports = { handleCommand, COMMAND_LIST, PUBLIC_COMMANDS };

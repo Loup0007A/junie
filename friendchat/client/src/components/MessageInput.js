@@ -1,10 +1,43 @@
 /* eslint-disable */
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import EmojiPicker from 'emoji-picker-react';
-import { api } from '../hooks/useContexts';
+import { api, useAuth } from '../hooks/useContexts';
+import { openRimbaudPicker } from './RimbaudGame';
+import { stripMarkup } from './MessageBubble';
 
-export default function MessageInput({ onSend, onTyping, disabled, placeholder = 'Écrire un message…' }) {
+// Commandes ouvertes à tous / réservées aux admins (autocomplétion)
+const PUBLIC_COMMANDS = [
+  { cmd: '/help', desc: 'Liste des commandes' },
+  { cmd: '/rimbaud', desc: 'Jeu : complète un vers de Rimbaud 🪶' },
+  { cmd: '/rimbaud choisir', desc: 'Choisis le poème et où le vers s\'arrête ✍️', action: 'picker' },
+  { cmd: '/rimbaud liste', desc: 'Poèmes disponibles 📜' },
+  { cmd: '/rimbaud indice', desc: 'Révèle un mot (-1 pt) 💡' },
+  { cmd: '/scores', desc: 'Classement du jeu Rimbaud 🏆' },
+];
+const ADMIN_COMMANDS = [
+  { cmd: '/announce', desc: 'Annonce à tous', example: '/announce Bonne nuit !' },
+  { cmd: '/shake', desc: 'Fait trembler l\'écran' },
+  { cmd: '/confetti', desc: 'Lance des confettis 🎊' },
+  { cmd: '/rain', desc: 'Fait pleuvoir un emoji', example: '/rain 🍕' },
+  { cmd: '/snow', desc: 'Fait tomber la neige ❄️' },
+  { cmd: '/disco', desc: 'Mode disco 🪩' },
+  { cmd: '/matrix', desc: 'Pluie Matrix 💻' },
+  { cmd: '/honk', desc: 'HONK HONK 🦢' },
+  { cmd: '/rickroll', desc: 'Rickroll classique 🎵' },
+  { cmd: '/dadjoke', desc: 'Blague aléatoire 😄' },
+  { cmd: '/8ball', desc: 'Boule magique 🎱', example: '/8ball Vais-je gagner ?' },
+  { cmd: '/roll', desc: 'Lance des dés 🎲', example: '/roll 2d6' },
+  { cmd: '/coinflip', desc: 'Pile ou face 🪙' },
+  { cmd: '/fakeban', desc: 'Faux ban pour rire 🔨', example: '/fakeban pseudo' },
+  { cmd: '/clear', desc: 'Efface l\'affichage du chat' },
+];
+
+export default function MessageInput({ onSend, onTyping, disabled, placeholder = 'Écrire un message…', replyingTo, onCancelReply }) {
+  const { user } = useAuth();
   const [text, setText] = useState('');
+  const [caret, setCaret] = useState(0);
+  const [members, setMembers] = useState([]);
+  const pendingCaret = useRef(null);
   const [showEmoji, setShowEmoji] = useState(false);
   const [showGif, setShowGif] = useState(false);
   const [gifSearch, setGifSearch] = useState('');
@@ -42,7 +75,57 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
     setTimeout(() => { el.focus(); el.setSelectionRange(pos + str.length, pos + str.length); }, 0);
   }, [text]);
 
+  // Liste des membres pour l'autocomplétion des @mentions
+  useEffect(() => {
+    api.get('/api/users').then(r => setMembers(r.data.map(u => u.username))).catch(() => {});
+  }, []);
+
+  useEffect(() => { if (replyingTo) inputRef.current?.focus(); }, [replyingTo]);
+
+  // @mention en cours de saisie juste avant le curseur
+  const mentionMatch = /(^|\s)@([A-Za-z0-9_]{0,20})$/.exec(text.slice(0, caret));
+  const mentionSuggestions = mentionMatch
+    ? members.filter(n => n !== user?.username && n.toLowerCase().startsWith(mentionMatch[2].toLowerCase())).slice(0, 6)
+    : [];
+
+  const insertMention = (name) => {
+    const before = text.slice(0, caret).replace(/@([A-Za-z0-9_]{0,20})$/, `@${name} `);
+    const newText = before + text.slice(caret);
+    pendingCaret.current = before.length;
+    setText(newText);
+    setCaret(before.length);
+  };
+
+  useLayoutEffect(() => {
+    const el = inputRef.current;
+    if (el && pendingCaret.current !== null) {
+      el.focus();
+      el.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      pendingCaret.current = null;
+    }
+  }, [text]);
+
+  const pickCommand = (c) => {
+    if (c.action === 'picker') { setText(''); openRimbaudPicker(); return; }
+    setText(c.example ? c.example.split(' ')[0] + ' ' : c.cmd + ' ');
+    inputRef.current?.focus();
+  };
+
   const handleKey = (e) => {
+    if ((e.key === 'Tab' || e.key === 'Enter') && !e.shiftKey && mentionSuggestions.length > 0) {
+      e.preventDefault();
+      insertMention(mentionSuggestions[0]);
+      return;
+    }
+    if (e.key === 'Tab' && filteredCmds.length > 0) {
+      e.preventDefault();
+      pickCommand(filteredCmds[0]);
+      return;
+    }
+    if (e.key === 'Escape' && replyingTo && onCancelReply) {
+      onCancelReply();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -51,6 +134,7 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
 
   const handleChange = (e) => {
     setText(e.target.value);
+    setCaret(e.target.selectionStart);
     if (onTyping) onTyping();
     clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => { if (onTyping) onTyping(true); }, 2000);
@@ -59,6 +143,7 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
   const handleSend = () => {
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
+    if (/^\/rimbaud\s+choisir$/i.test(trimmed)) { setText(''); openRimbaudPicker(); return; }
     onSend({ content: trimmed, type: 'text' });
     setText('');
   };
@@ -142,28 +227,11 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
   };
 
   // Slash command autocomplete
-  const COMMANDS = [
-    { cmd: '/help', desc: 'Liste des commandes' },
-    { cmd: '/announce', desc: 'Annonce à tous', example: '/announce Bonne nuit !' },
-    { cmd: '/shake', desc: 'Fait trembler l\'écran' },
-    { cmd: '/confetti', desc: 'Lance des confettis 🎊' },
-    { cmd: '/rain', desc: 'Fait pleuvoir un emoji', example: '/rain 🍕' },
-    { cmd: '/snow', desc: 'Fait tomber la neige ❄️' },
-    { cmd: '/disco', desc: 'Mode disco 🪩' },
-    { cmd: '/matrix', desc: 'Pluie Matrix 💻' },
-    { cmd: '/honk', desc: 'HONK HONK 🦢' },
-    { cmd: '/rickroll', desc: 'Rickroll classique 🎵' },
-    { cmd: '/dadjoke', desc: 'Blague aléatoire 😄' },
-    { cmd: '/8ball', desc: 'Boule magique 🎱', example: '/8ball Vais-je gagner ?' },
-    { cmd: '/roll', desc: 'Lance des dés 🎲', example: '/roll 2d6' },
-    { cmd: '/coinflip', desc: 'Pile ou face 🪙' },
-    { cmd: '/fakeban', desc: 'Faux ban pour rire 🔨', example: '/fakeban pseudo' },
-    { cmd: '/clear', desc: 'Efface l\'affichage du chat' },
-  ];
-
-  const showCmdSuggest = text.startsWith('/') && !text.includes(' ');
+  const COMMANDS = user?.role === 'admin' ? [...PUBLIC_COMMANDS, ...ADMIN_COMMANDS] : PUBLIC_COMMANDS;
+  const lowered = text.toLowerCase();
+  const showCmdSuggest = text.startsWith('/') && !/\s\S+\s/.test(text) && !text.endsWith(' ') ;
   const filteredCmds = showCmdSuggest
-    ? COMMANDS.filter(c => c.cmd.startsWith(text.toLowerCase()))
+    ? COMMANDS.filter(c => c.cmd.startsWith(lowered) && c.cmd !== lowered)
     : [];
 
   const MD_ACTIONS = [
@@ -211,7 +279,7 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
           boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 200
         }}>
           <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            ⚡ Commandes admin
+            ⚡ Commandes <span style={{ textTransform: 'none', fontWeight: 400 }}>— Tab pour compléter</span>
           </div>
           {filteredCmds.slice(0, 8).map(c => (
             <button
@@ -225,17 +293,50 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
               }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={e => e.currentTarget.style.background = 'none'}
-              onMouseDown={e => {
-                e.preventDefault();
-                setText(c.example ? c.example.split(' ')[0] + ' ' : c.cmd + ' ');
-                inputRef.current?.focus();
-              }}
+              onMouseDown={e => { e.preventDefault(); pickCommand(c); }}
             >
-              <code style={{ color: 'var(--accent-light)', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 110 }}>{c.cmd}</code>
+              <code style={{ color: 'var(--accent-light)', fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 130 }}>{c.cmd}</code>
               <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{c.desc}</span>
               {c.example && <span style={{ color: 'var(--text-muted)', fontSize: 11, fontStyle: 'italic' }}>{c.example}</span>}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* @mention autocomplete */}
+      {mentionSuggestions.length > 0 && (
+        <div style={{
+          position: 'absolute', bottom: '100%', left: 16, marginBottom: 4, minWidth: 220,
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10,
+          boxShadow: 'var(--shadow-lg)', overflow: 'hidden', zIndex: 200
+        }}>
+          <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>
+            Mentionner — Tab/Entrée
+          </div>
+          {mentionSuggestions.map(name => (
+            <button
+              key={name}
+              type="button"
+              style={{ width: '100%', display: 'block', padding: '7px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', color: 'var(--text-primary)', fontSize: 13 }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              onMouseDown={e => { e.preventDefault(); insertMention(name); }}
+            >
+              <span style={{ color: '#93c5fd', fontWeight: 600 }}>@{name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Reply bar */}
+      {replyingTo && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '6px 10px', borderLeft: '3px solid var(--accent-light)', background: 'var(--bg-elevated)', borderRadius: 6, fontSize: 12 }}>
+          <span style={{ color: 'var(--text-muted)' }}>↩ Réponse à</span>
+          <b>{replyingTo.sender_name}</b>
+          <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {replyingTo.type === 'text' ? stripMarkup(replyingTo.content) : replyingTo.type === 'gif' ? '🎞️ GIF' : '📸 Image'}
+          </span>
+          <button type="button" className="btn btn-ghost" style={{ padding: '0 6px' }} onClick={onCancelReply} title="Annuler (Échap)">✕</button>
         </div>
       )}
 
@@ -356,6 +457,8 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
           value={text}
           onChange={handleChange}
           onKeyDown={handleKey}
+          onKeyUp={e => setCaret(e.target.selectionStart)}
+          onClick={e => setCaret(e.target.selectionStart)}
           placeholder={disabled ? 'Vous êtes muet(te)…' : placeholder}
           disabled={disabled}
           rows={1}

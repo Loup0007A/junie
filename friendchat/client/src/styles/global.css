@@ -414,3 +414,71 @@ textarea.input { resize: vertical; min-height: 80px; }
   :root { --sidebar-width: 220px; }
   .auth-card { padding: 24px 20px; }
 }
+
+/* === Jeu Rimbaud === */
+.rimbaud-panel {
+  /* Docked as a column to the right of the chat so it never hides messages */
+  width: 360px;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border-strong);
+  box-shadow: -8px 0 24px rgba(0,0,0,0.25);
+  animation: fadeIn 0.2s ease;
+  overflow: hidden;
+}
+@media (max-width: 1000px) {
+  .rimbaud-panel {
+    position: fixed; top: 72px; right: 12px; z-index: 900;
+    width: 360px; max-width: calc(100vw - 24px); height: auto; max-height: calc(100vh - 190px);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  }
+}
+.rimbaud-poem-item {
+  display: block; width: 100%; text-align: left; border: none; cursor: pointer;
+  padding: 8px 12px; color: var(--text-primary); transition: background var(--transition);
+}
+.rimbaud-poem-item:hover { background: var(--bg-hover) !important; }
+.rimbaud-word {
+  cursor: pointer; padding: 1px 2px; margin-right: 3px; border-radius: 4px;
+  transition: background var(--transition), color var(--transition);
+}
+.rimbaud-word:hover { background: var(--accent-dim); color: var(--accent-light); }
+.rimbaud-word.is-hidden { color: var(--accent-light); background: var(--accent-dim); text-decoration: underline dashed; text-underline-offset: 4px; }
+.rimbaud-word.is-cut { box-shadow: -3px 0 0 var(--warning); }
+
+/* === Messages : actions, réactions, réponses, mentions === */
+.msg-actions {
+  display: flex; align-items: center; gap: 2px; align-self: center;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px;
+  padding: 2px 4px; box-shadow: var(--shadow-sm);
+}
+.msg-actions button {
+  background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1;
+  padding: 4px 5px; border-radius: 999px; color: var(--text-secondary);
+}
+.msg-actions button:hover { background: var(--bg-hover); transform: scale(1.15); }
+.reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.reaction-chip {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary);
+  font-family: var(--font-body); transition: border-color var(--transition);
+}
+.reaction-chip:hover { border-color: var(--accent); }
+.reaction-chip.mine { background: var(--accent-dim); border-color: var(--accent-light); color: var(--text-primary); }
+.reply-quote {
+  font-size: 12px; padding: 4px 10px; border-left: 3px solid var(--accent-light);
+  background: rgba(255,255,255,0.04); border-radius: 6px; color: var(--text-secondary);
+  cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.reply-quote:hover { background: rgba(255,255,255,0.08); }
+.mention {
+  background: rgba(96, 165, 250, 0.18); color: #93c5fd; border-radius: 4px; padding: 0 3px; font-weight: 600;
+}
+.mention.mention-me { background: rgba(251, 191, 36, 0.22); color: var(--warning); }
+.msg-mentions-me { box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.55) !important; }
+@keyframes msgFlash { 0%, 100% { background: transparent; } 30% { background: var(--accent-dim); } }
+.msg-flash { animation: msgFlash 1.4s ease; border-radius: 8px; }

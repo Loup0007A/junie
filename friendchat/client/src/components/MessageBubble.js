@@ -5,8 +5,19 @@ import { Avatar } from './Sidebar';
 import { format, isToday, isYesterday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
+export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
+const MENTION_RE = /(^|[\s(>])@([A-Za-z0-9_]{3,20})(?![A-Za-z0-9_])/g;
+
+export const stripMarkup = (s) => (s || '').replace(/<[^>]+>/g, '').replace(/[*~`]/g, '').replace(/^> /gm, '');
+
+export function mentionsUser(text, username) {
+  if (!text || !username) return false;
+  const re = new RegExp(`(^|[\\s(>*_~])@${username}(?![A-Za-z0-9_])`, 'i');
+  return re.test(text);
+}
+
 // Parse inline markdown to HTML (manual, lightweight)
-function parseMarkdown(text) {
+function parseMarkdown(text, myUsername) {
   if (!text) return '';
   let html = text
     // HTML color tags passthrough (our custom color)
@@ -35,6 +46,11 @@ function parseMarkdown(text) {
     .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
     // URLs
     .replace(/https?:\/\/[^\s<>"]+/g, url => `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent-light)">${url}</a>`)
+    // @mentions
+    .replace(MENTION_RE, (m, pre, name) => {
+      const me = myUsername && name.toLowerCase() === myUsername.toLowerCase();
+      return `${pre}<span class="mention${me ? ' mention-me' : ''}">@${name}</span>`;
+    })
     // Newlines
     .replace(/\n/g, '<br/>');
   return html;
@@ -47,12 +63,15 @@ function formatTimestamp(ts) {
   return format(date, 'dd MMM HH:mm', { locale: fr });
 }
 
-export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelete }) {
+export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelete, onReact, onReply, onJumpTo, canDelete = true }) {
   const { user } = useAuth();
   const [showActions, setShowActions] = useState(false);
   const [imgModal, setImgModal] = useState(null);
 
   const isAdmin = user?.role === 'admin';
+  const isSystem = message.sender_id === 'system' || String(message.id).startsWith('sys-');
+  const reactions = Object.entries(message.reactions || {}).filter(([, names]) => names.length);
+  const mentionsMe = !isOwn && message.type === 'text' && mentionsUser(message.content, user?.username);
 
   if (message.deleted) return (
     <div style={{ padding: '4px 16px', opacity: 0.4, fontStyle: 'italic', fontSize: 13, color: 'var(--text-muted)' }}>
@@ -63,6 +82,7 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
   return (
     <>
       <div
+        id={`msg-${message.id}`}
         style={{
           display: 'flex',
           flexDirection: isOwn ? 'row-reverse' : 'row',
@@ -98,6 +118,13 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
             </div>
           )}
 
+          {/* Quoted message (reply) */}
+          {message.reply_to && (
+            <div className="reply-quote" onClick={() => onJumpTo && onJumpTo(message.reply_to.id)} title="Voir le message d'origine">
+              ↩ <b>{message.reply_to.sender_name}</b> : {stripMarkup(message.reply_to.excerpt)}
+            </div>
+          )}
+
           {/* Content */}
           <div style={{ position: 'relative' }}>
             {message.type === 'gif' ? (
@@ -129,8 +156,8 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
                   wordBreak: 'break-word',
                   boxShadow: 'var(--shadow-sm)'
                 }}
-                className="md-content"
-                dangerouslySetInnerHTML={{ __html: parseMarkdown(message.content) }}
+                className={`md-content${mentionsMe ? ' msg-mentions-me' : ''}`}
+                dangerouslySetInnerHTML={{ __html: parseMarkdown(message.content, user?.username) }}
               />
             )}
 
@@ -152,20 +179,42 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
               </span>
             )}
           </div>
+
+          {/* Reactions */}
+          {reactions.length > 0 && (
+            <div className="reaction-row" style={{ justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
+              {reactions.map(([emoji, names]) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={`reaction-chip${names.includes(user?.username) ? ' mine' : ''}`}
+                  onClick={() => onReact && onReact(message.id, emoji)}
+                  title={names.join(', ')}
+                >
+                  <span>{emoji}</span><span>{names.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Admin actions */}
-        {isAdmin && showActions && (
-          <button
-            className="btn btn-ghost btn-icon"
-            style={{ opacity: 0.7, padding: 4, alignSelf: 'center' }}
-            onClick={() => onAdminDelete && onAdminDelete(message.id)}
-            title="Supprimer ce message"
-          >
-            <svg width="14" height="14" fill="none" stroke="var(--danger)" strokeWidth="2" viewBox="0 0 24 24">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
-            </svg>
-          </button>
+        {/* Hover actions: reactions, reply, admin delete */}
+        {showActions && !isSystem && (
+          <div className="msg-actions">
+            {onReact && QUICK_REACTIONS.slice(0, 6).map(e => (
+              <button key={e} type="button" onClick={() => onReact(message.id, e)} title={`Réagir ${e}`}>{e}</button>
+            ))}
+            {onReply && (
+              <button type="button" onClick={() => onReply(message)} title="Répondre">↩️</button>
+            )}
+            {isAdmin && canDelete && (
+              <button type="button" onClick={() => onAdminDelete && onAdminDelete(message.id)} title="Supprimer ce message">
+                <svg width="14" height="14" fill="none" stroke="var(--danger)" strokeWidth="2" viewBox="0 0 24 24">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            )}
+          </div>
         )}
       </div>
 
