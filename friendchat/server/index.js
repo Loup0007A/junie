@@ -99,7 +99,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
     await db.users.update({ _id: user._id }, { $set: { lastSeen: Date.now() } });
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, avatar: user.avatar || null, bio: user.bio || '', muted: user.muted || false, mute_until: user.muteUntil || null, mustChangePassword: user.mustChangePassword || false, invisible: user.invisible || false } });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role, avatar: user.avatar || null, bio: user.bio || '', muted: user.muted || false, mute_until: user.muteUntil || null, mustChangePassword: user.mustChangePassword || false, invisible: user.invisible || false, ...moodOf(user) } });
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -113,20 +113,42 @@ app.get('/api/auth/me', auth, async (req, res) => {
       avatar: user.avatar || null, bio: user.bio || '',
       muted: user.muted || false, mute_until: user.muteUntil || null,
       status: user.status, mustChangePassword: user.mustChangePassword || false,
-      invisible: user.invisible || false
+      invisible: user.invisible || false, ...moodOf(user)
     });
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─── Users ──────────────────────────────────────────────────
+const PRESENCES = ['online', 'away', 'dnd'];
+// Custom status ("mood"): emoji + short text, plus availability (online / away / do not disturb)
+const moodOf = (u) => ({ mood: u.mood || null, presence: PRESENCES.includes(u.presence) ? u.presence : 'online' });
 app.get('/api/users', auth, async (req, res) => {
   try {
     const users = await db.users.find({ status: 'approved', banned: { $ne: true }, invisible: { $ne: true } });
     res.json(users.map(u => ({
       id: u.id, username: u.username, role: u.role,
       avatar: u.avatar || null, bio: u.bio || '',
-      muted: u.muted || false, muteUntil: u.muteUntil || null, lastSeen: u.lastSeen || null
+      muted: u.muted || false, muteUntil: u.muteUntil || null, lastSeen: u.lastSeen || null,
+      ...moodOf(u)
     })).sort((a, b) => a.username.localeCompare(b.username)));
+  } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// Public profile card: bio, status, dates and a few stats
+app.get('/api/users/:id/profile', auth, async (req, res) => {
+  try {
+    const u = await db.users.findOne({ id: req.params.id, status: 'approved' });
+    if (!u || (u.invisible && u.id !== req.user.id)) return res.status(404).json({ error: 'Membre introuvable' });
+    const [messageCount, pmCount, score] = await Promise.all([
+      db.messages.count({ senderId: u.id, deleted: { $ne: true } }),
+      db.privateMessages.count({ senderId: u.id, deleted: { $ne: true } }),
+      db.scores.findOne({ userId: u.id }),
+    ]);
+    res.json({
+      id: u.id, username: u.username, role: u.role, avatar: u.avatar || null, bio: u.bio || '',
+      createdAt: u.createdAt || null, lastSeen: u.lastSeen || null, ...moodOf(u),
+      stats: { messages: messageCount + pmCount, rimbaudPoints: score?.points || 0, rimbaudWins: score?.wins || 0 },
+    });
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -180,10 +202,19 @@ async function avatarMapFor(msgs) {
   return map;
 }
 
+// ?before=<timestamp> loads older messages (infinite scroll); ?limit= up to HISTORY_LIMIT
+const pageParams = (q) => ({
+  before: Number(q.before) > 0 ? Number(q.before) : null,
+  limit: Math.min(HISTORY_LIMIT, Math.max(1, parseInt(q.limit, 10) || HISTORY_LIMIT)),
+});
+
 app.get('/api/messages/global', auth, async (req, res) => {
   try {
+    const { before, limit } = pageParams(req.query);
+    const query = { room: 'global', deleted: { $ne: true } };
+    if (before) query.createdAt = { $lt: before };
     // Most recent messages first, then put back in chronological order
-    const msgs = (await db.messages.find({ room: 'global', deleted: { $ne: true } }).sort({ createdAt: -1 }).limit(HISTORY_LIMIT)).reverse();
+    const msgs = (await db.messages.find(query).sort({ createdAt: -1 }).limit(limit)).reverse();
     const avatarMap = await avatarMapFor(msgs);
     res.json(msgs.map(m => serializeMessage(m, avatarMap[m.senderId] || null)));
   } catch { res.status(500).json({ error: 'Server error' }); }
@@ -192,14 +223,17 @@ app.get('/api/messages/global', auth, async (req, res) => {
 app.get('/api/messages/private/:userId', auth, async (req, res) => {
   try {
     const { userId } = req.params;
-    const msgs = await db.privateMessages.find({
+    const { before, limit } = pageParams(req.query);
+    const query = {
       $or: [{ senderId: req.user.id, receiverId: userId }, { senderId: userId, receiverId: req.user.id }],
       deleted: { $ne: true }
-    }).sort({ createdAt: -1 }).limit(HISTORY_LIMIT);
+    };
+    if (before) query.createdAt = { $lt: before };
+    const msgs = await db.privateMessages.find(query).sort({ createdAt: -1 }).limit(limit);
     msgs.reverse();
 
-    // Mark as read
-    await db.privateMessages.update({ senderId: userId, receiverId: req.user.id, read: false }, { $set: { read: true } }, { multi: true });
+    // Mark as read (and tell the sender, for the "Seen" receipt)
+    if (!before) await markRead(userId, req.user.id);
 
     const avatarMap = await avatarMapFor(msgs);
     res.json(msgs.map(m => serializeMessage(m, avatarMap[m.senderId] || null)));
@@ -212,6 +246,27 @@ app.get('/api/messages/unread', auth, async (req, res) => {
     const counts = {};
     msgs.forEach(m => counts[m.senderId] = (counts[m.senderId] || 0) + 1);
     res.json(Object.entries(counts).map(([sender_id, count]) => ({ sender_id, count })));
+  } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// Read receipts: mark messages from `senderId` to `readerId` as read and notify the sender
+async function markRead(senderId, readerId) {
+  const n = await db.privateMessages.update({ senderId, receiverId: readerId, read: false }, { $set: { read: true, readAt: Date.now() } }, { multi: true });
+  if (n > 0) io.to(`user-${senderId}`).emit('messages_read', { readerId, at: Date.now() });
+}
+
+// Pinned messages of the global chat (with=global) or of a private conversation (with=<userId>)
+app.get('/api/messages/pinned', auth, async (req, res) => {
+  try {
+    const w = req.query.with;
+    const rows = !w || w === 'global'
+      ? await db.messages.find({ room: 'global', deleted: { $ne: true }, pinned: { $exists: true } })
+      : await db.privateMessages.find({ $and: [
+          { $or: [{ senderId: req.user.id, receiverId: w }, { senderId: w, receiverId: req.user.id }] },
+          { deleted: { $ne: true } }, { pinned: { $exists: true } },
+        ] });
+    rows.sort((a, b) => (b.pinned?.at || 0) - (a.pinned?.at || 0));
+    res.json(rows.filter(m => m.pinned).map(m => serializeMessage(m)));
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -466,7 +521,7 @@ io.on('connection', (socket) => {
   const user = socket.user;
   console.log(`✅ ${user.username} connected`);
 
-  onlineUsers.set(socket.id, { userId: user.id, username: user.username, role: user.role, avatar: user.avatar || null });
+  onlineUsers.set(socket.id, { userId: user.id, username: user.username, role: user.role, avatar: user.avatar || null, ...moodOf(user) });
   socket.join(`user-${user.id}`);
   socket.join('global');
   if (user.role === 'admin') socket.join('admin-room');
@@ -581,8 +636,41 @@ io.on('connection', (socket) => {
     else if (receiverId) io.to(`user-${receiverId}`).emit('user_stop_typing', { userId: user.id, room: `pm-${user.id}` });
   });
 
-  socket.on('mark_read', async ({ senderId }) => {
-    await db.privateMessages.update({ senderId, receiverId: user.id, read: false }, { $set: { read: true } }, { multi: true });
+  socket.on('mark_read', async ({ senderId } = {}) => {
+    if (typeof senderId === 'string') await markRead(senderId, user.id);
+  });
+
+  // Custom status + availability
+  socket.on('set_status', async ({ emoji, text, presence } = {}) => {
+    if (!moderation.allowAction(user)) return;
+    const cleanEmoji = typeof emoji === 'string' ? Array.from(emoji).slice(0, 2).join('') : '';
+    const cleanText = typeof text === 'string' ? moderation.censor(text.trim().slice(0, 60)).text : '';
+    const mood = cleanEmoji || cleanText ? { emoji: cleanEmoji, text: cleanText } : null;
+    const p = PRESENCES.includes(presence) ? presence : 'online';
+    await db.users.update({ id: user.id }, { $set: { mood, presence: p } });
+    user.mood = mood; user.presence = p;
+    for (const [sid, info] of onlineUsers) if (info.userId === user.id) onlineUsers.set(sid, { ...info, mood, presence: p });
+    io.emit('online_users', Array.from(onlineUsers.values()));
+    io.emit('user_status', { userId: user.id, mood, presence: p });
+  });
+
+  // Pin / unpin: admins in the global chat, both participants in a private conversation
+  socket.on('toggle_pin', async ({ messageId, scope = 'global' } = {}) => {
+    if (typeof messageId !== 'string' || !moderation.allowAction(user)) return;
+    const isPrivate = scope === 'private';
+    if (!isPrivate && user.role !== 'admin') return socket.emit('system_message', { content: 'Seuls les admins peuvent épingler dans le chat global.' });
+    const store = isPrivate ? db.privateMessages : db.messages;
+    const filter = isPrivate ? { id: messageId, $or: [{ senderId: user.id }, { receiverId: user.id }] } : { id: messageId, room: 'global' };
+    const msg = await store.findOne(filter);
+    if (!msg || msg.deleted) return;
+    const pinned = msg.pinned ? null : { by: user.username, at: Date.now() };
+    if (pinned) await store.update({ id: messageId }, { $set: { pinned } });
+    else await store.update({ id: messageId }, { $unset: { pinned: true } });
+    const payload = { id: messageId, pinned, message: serializeMessage({ ...msg, pinned }) };
+    if (isPrivate) {
+      io.to(`user-${msg.senderId}`).emit('message_pinned', payload);
+      io.to(`user-${msg.receiverId}`).emit('message_pinned', payload);
+    } else io.to('global').emit('message_pinned', payload);
   });
 
   socket.on('disconnect', async () => {

@@ -1,12 +1,14 @@
 /* eslint-disable */
 import React, { useState, useEffect, useRef } from 'react';
+import { Feather, Minus, X, Timer, Award, Eye, Lightbulb, Trophy, Hourglass, Flag, Dices, MousePointerClick } from 'lucide-react';
+import { stripEmoji } from '../hooks/text';
 import { useAuth, useSocket } from '../hooks/useContexts';
 import RimbaudPicker from './RimbaudPicker';
 
 // Ouvre le sélecteur depuis n'importe où (ex : commande « /rimbaud choisir »)
 export const openRimbaudPicker = () => window.dispatchEvent(new Event('rimbaud:open-picker'));
 
-const SERIF = "Georgia, 'Times New Roman', serif";
+const SERIF = 'var(--font-poem)';
 
 function Blank({ word }) {
   return (
@@ -102,12 +104,12 @@ export default function RimbaudGame() {
           onClick={() => setMinimized(false)}
           style={{
             position: 'fixed', top: 72, right: 20, zIndex: 900, cursor: 'pointer',
-            background: 'linear-gradient(135deg,var(--accent),var(--accent-light))', color: '#fff', border: 'none',
+            background: 'var(--accent)', color: 'var(--on-accent)', border: 'none', display: 'flex', alignItems: 'center', gap: 8,
             borderRadius: 999, padding: '8px 16px', fontWeight: 600, fontSize: 13, boxShadow: 'var(--shadow-lg)',
           }}
           title="Rouvrir le jeu"
         >
-          🪶 Rimbaud {playing ? `· ${mmss}` : '· terminé'}
+          <Feather size={15} /> Rimbaud {playing ? mmss : '· terminé'}
         </button>
         {picker}
       </>
@@ -119,15 +121,15 @@ export default function RimbaudGame() {
       <div className="rimbaud-panel">
         {/* En-tête */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 22 }}>🪶</span>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--accent-dim)', color: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Feather size={18} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>Complète le vers</div>
+            <div style={{ fontWeight: 700, fontSize: 15, fontFamily: 'var(--font-display)' }}>Complète le vers</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               <em>{game.poemTitle}</em> · vers {game.verseNumber} · lancé par {game.startedBy}{game.chosen ? ' (choisi)' : ''}
             </div>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={() => setMinimized(true)} title="Réduire">—</button>
-          {!playing && <button className="btn btn-ghost btn-icon" onClick={() => setGame(null)} title="Fermer">✕</button>}
+          <button className="btn btn-ghost btn-icon" onClick={() => setMinimized(true)} title="Réduire" aria-label="Réduire"><Minus size={17} /></button>
+          {!playing && <button className="btn btn-ghost btn-icon" onClick={() => setGame(null)} title="Fermer" aria-label="Fermer"><X size={17} /></button>}
         </div>
 
         {/* Minuteur */}
@@ -164,13 +166,13 @@ export default function RimbaudGame() {
           {playing ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
-                <span>⏱ <b style={{ color: remaining <= 15 ? 'var(--danger)' : 'var(--text-primary)' }}>{mmss}</b></span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Timer size={13} /> <b style={{ color: remaining <= 15 ? 'var(--danger)' : 'var(--text-primary)' }}>{mmss}</b></span>
                 <span>{game.hiddenCount} mot{game.hiddenCount > 1 ? 's' : ''} à trouver</span>
-                <span>🏅 {game.points} pt{game.points > 1 ? 's' : ''}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Award size={13} /> {game.points} pt{game.points > 1 ? 's' : ''}</span>
               </div>
               {iKnowIt ? (
                 <div className="alert alert-info" style={{ fontSize: 12, padding: '8px 10px' }}>
-                  Tu as choisi ce vers : regarde les autres chercher 👀
+                  <Eye size={14} /> Tu as choisi ce vers : regarde les autres chercher.
                 </div>
               ) : (
                 <form onSubmit={submit} style={{ display: 'flex', gap: 6 }}>
@@ -194,7 +196,7 @@ export default function RimbaudGame() {
                   disabled={hintsLeft <= 0 || iUsedMyHint}
                   title={iUsedMyHint ? 'Tu as déjà utilisé ton indice (un seul par personne)' : game.starterId === user.id ? 'Révèle le mot suivant (-1 point) — illimité pour le créateur' : 'Révèle le mot suivant (-1 point) — un seul indice par personne'}
                 >
-                  💡 {iUsedMyHint ? 'Indice utilisé' : 'Indice'}
+                  <Lightbulb size={14} /> {iUsedMyHint ? 'Indice utilisé' : 'Indice'}
                 </button>
                 {canStop && (
                   <button className="btn btn-danger btn-sm" onClick={() => socket?.emit('rimbaud_stop')} title="Arrête la partie et révèle la réponse">
@@ -207,21 +209,22 @@ export default function RimbaudGame() {
             </>
           ) : (
             <>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                {game.status === 'won' ? <Trophy size={16} style={{ color: 'var(--accent-light)' }} /> : game.status === 'timeout' ? <Hourglass size={16} /> : <Flag size={16} />}
                 {game.status === 'won'
-                  ? (game.winner?.id === user.id ? `🏆 Bravo, tu as trouvé ! +${game.winner.points} pt${game.winner.points > 1 ? 's' : ''}` : `🏆 ${game.winner?.username} a trouvé (+${game.winner?.points})`)
-                  : game.status === 'timeout' ? '⏰ Temps écoulé !' : '🏳️ Partie arrêtée'}
+                  ? (game.winner?.id === user.id ? `Bravo, tu as trouvé ! +${game.winner.points} pt${game.winner.points > 1 ? 's' : ''}` : `${game.winner?.username} a trouvé (+${game.winner?.points})`)
+                  : game.status === 'timeout' ? 'Temps écoulé !' : 'Partie arrêtée'}
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <button className="btn btn-primary btn-sm" onClick={startRandom}>🎲 Rejouer</button>
-                <button className="btn btn-secondary btn-sm" onClick={openRimbaudPicker}>✍️ Choisir un vers</button>
+                <button className="btn btn-primary btn-sm" onClick={startRandom}><Dices size={14} /> Rejouer</button>
+                <button className="btn btn-secondary btn-sm" onClick={openRimbaudPicker}><MousePointerClick size={14} /> Choisir un vers</button>
                 <button className="btn btn-ghost btn-sm" onClick={() => setGame(null)}>Fermer</button>
               </div>
             </>
           )}
           {feedback && (
             <div style={{ fontSize: 13, fontWeight: 500, color: feedback.ok ? 'var(--success)' : feedback.info ? 'var(--warning)' : 'var(--text-secondary)' }}>
-              {feedback.message}{!feedback.ok && feedback.closeness ? ` (${feedback.closeness} %)` : ''}
+              {stripEmoji(feedback.message)}{!feedback.ok && feedback.closeness ? ` (${feedback.closeness} %)` : ''}
             </div>
           )}
         </div>

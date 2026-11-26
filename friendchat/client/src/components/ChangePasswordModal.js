@@ -1,5 +1,6 @@
 /* eslint-disable */
 import React, { useState } from 'react';
+import { X, Check } from 'lucide-react';
 import { api, useAuth } from '../hooks/useContexts';
 
 export default function ChangePasswordModal({ forced = false, onClose }) {
@@ -35,10 +36,10 @@ export default function ChangePasswordModal({ forced = false, onClose }) {
       <div className="modal" style={{ maxWidth: 400 }}>
         <div className="modal-header">
           <h3 className="modal-title">
-            {forced ? '🔐 Changez votre mot de passe' : '🔑 Changer le mot de passe'}
+            {forced ? 'Choisis un nouveau mot de passe' : 'Changer le mot de passe'}
           </h3>
           {!forced && (
-            <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+            <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
           )}
         </div>
 
@@ -50,7 +51,7 @@ export default function ChangePasswordModal({ forced = false, onClose }) {
 
         {success ? (
           <div className="alert alert-success">
-            ✅ Mot de passe changé avec succès !
+            <Check size={16} /> Mot de passe changé.
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

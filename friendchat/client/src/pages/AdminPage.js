@@ -1,5 +1,6 @@
 /* eslint-disable */
 import React, { useState, useEffect, useCallback } from 'react';
+import { Inbox, Users, BarChart3, Shield, CheckCircle2, Check, X, UserCheck, Ban, Crown, UserRound, Eye, EyeOff, Volume2, VolumeX, KeyRound, ArrowLeft, ChevronsDown, ChevronsUp } from 'lucide-react';
 import { useAuth, useSocket, api } from '../hooks/useContexts';
 import { Avatar } from '../components/Sidebar';
 import { format } from 'date-fns';
@@ -73,7 +74,7 @@ export default function AdminPage() {
       await api.post(`/api/admin/requests/${id}/approve`);
       setRequests(prev => prev.filter(r => r.id !== id));
       setNewRequestCount(prev => Math.max(0, prev - 1));
-      showNotif('Utilisateur approuvé ✅');
+      showNotif('Utilisateur approuvé');
       loadUsers();
     } catch (err) {
       showNotif(err.response?.data?.error || 'Erreur', 'error');
@@ -158,9 +159,9 @@ export default function AdminPage() {
   );
 
   const TABS = [
-    { id: 'requests', label: 'Demandes', icon: '📨', badge: requests.length },
-    { id: 'users', label: 'Utilisateurs', icon: '👥', badge: null },
-    { id: 'stats', label: 'Statistiques', icon: '📊', badge: null },
+    { id: 'requests', label: 'Demandes', icon: <Inbox size={17} />, badge: requests.length },
+    { id: 'users', label: 'Utilisateurs', icon: <Users size={17} />, badge: null },
+    { id: 'stats', label: 'Statistiques', icon: <BarChart3 size={17} />, badge: null },
   ];
 
   const approvedCount = users.filter(u => u.status === 'approved' && !u.banned).length;
@@ -172,7 +173,7 @@ export default function AdminPage() {
       {/* Sidebar */}
       <div style={{ width: 200, background: 'var(--bg-surface)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontWeight: 700, fontSize: 15 }}>⚙️ Administration</div>
+          <div style={{ fontWeight: 800, fontSize: 17, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 8 }}><Shield size={18} style={{ color: 'var(--accent-light)' }} /> Administration</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{user.username}</div>
         </div>
 
@@ -203,7 +204,7 @@ export default function AdminPage() {
 
         <div style={{ padding: 8 }}>
           <a href="/chat" className="btn btn-secondary btn-sm" style={{ width: '100%', display: 'flex' }}>
-            ← Retour au chat
+            <ArrowLeft size={15} /> Retour au chat
           </a>
         </div>
       </div>
@@ -213,9 +214,9 @@ export default function AdminPage() {
         {/* Header */}
         <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: 18, fontWeight: 700 }}>
-            {tab === 'requests' && '📨 Demandes d\'inscription'}
-            {tab === 'users' && '👥 Gestion des utilisateurs'}
-            {tab === 'stats' && '📊 Statistiques'}
+            {tab === 'requests' && 'Demandes d\'inscription'}
+            {tab === 'users' && 'Gestion des utilisateurs'}
+            {tab === 'stats' && 'Statistiques'}
           </h1>
           {loading && <div className="spinner" />}
         </div>
@@ -235,7 +236,7 @@ export default function AdminPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {requests.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
+                  <div style={{ marginBottom: 12, color: 'var(--success)', display: 'flex', justifyContent: 'center' }}><CheckCircle2 size={40} strokeWidth={1.6} /></div>
                   <p>Aucune demande en attente</p>
                 </div>
               ) : requests.map(req => (
@@ -259,8 +260,8 @@ export default function AdminPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <button className="btn btn-success btn-sm" onClick={() => handleApprove(req.id)}>✓ Approuver</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleReject(req.id)}>✕ Rejeter</button>
+                    <button className="btn btn-success btn-sm" onClick={() => handleApprove(req.id)}><Check size={14} /> Approuver</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => handleReject(req.id)}><X size={14} /> Rejeter</button>
                   </div>
                 </div>
               ))}
@@ -302,14 +303,14 @@ export default function AdminPage() {
           {tab === 'stats' && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
               {[
-                { icon: '👥', label: 'Membres actifs', value: approvedCount, color: 'var(--success)' },
-                { icon: '⛔', label: 'Comptes bannis', value: bannedCount, color: 'var(--danger)' },
-                { icon: '👑', label: 'Administrateurs', value: adminCount, color: 'var(--accent-light)' },
-                { icon: '📨', label: 'Demandes en attente', value: requests.length, color: 'var(--warning)' },
-                { icon: '👤', label: 'Total comptes', value: users.length, color: 'var(--info)' },
+                { icon: <UserCheck size={30} />, label: 'Membres actifs', value: approvedCount, color: 'var(--success)' },
+                { icon: <Ban size={30} />, label: 'Comptes bannis', value: bannedCount, color: 'var(--danger)' },
+                { icon: <Crown size={30} />, label: 'Administrateurs', value: adminCount, color: 'var(--accent-light)' },
+                { icon: <Inbox size={30} />, label: 'Demandes en attente', value: requests.length, color: 'var(--warning)' },
+                { icon: <UserRound size={30} />, label: 'Total comptes', value: users.length, color: 'var(--info)' },
               ].map((stat, i) => (
                 <div key={i} className="card" style={{ textAlign: 'center', padding: 24 }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>{stat.icon}</div>
+                  <div style={{ marginBottom: 8, color: stat.color, display: 'flex', justifyContent: 'center' }}>{stat.icon}</div>
                   <div style={{ fontSize: 36, fontWeight: 700, color: stat.color, fontFamily: 'var(--font-mono)' }}>{stat.value}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{stat.label}</div>
                 </div>
@@ -343,8 +344,8 @@ function UserRow({ u, currentUser, onBan, onUnban, onMute, onUnmute, onPromote, 
           {u.role === 'admin' && <span className="badge badge-admin">Admin</span>}
           {u.banned && <span className="badge badge-banned">Banni</span>}
           {u.muted && <span className="badge badge-muted">Muet</span>}
-          {u.invisible && <span className="badge" style={{ background: 'rgba(156,163,175,0.15)', color: '#9ca3af', border: '1px solid rgba(156,163,175,0.3)' }}>👻 Invisible</span>}
-          {u.mustChangePassword && <span className="badge" style={{ background: 'rgba(251,191,36,0.1)', color: 'var(--warning)' }}>🔑 Doit changer MDP</span>}
+          {u.invisible && <span className="badge" style={{ background: 'rgba(156,163,175,0.15)', color: '#9ca3af', border: '1px solid rgba(156,163,175,0.3)' }}><EyeOff size={11} style={{ marginRight: 4 }} /> Invisible</span>}
+          {u.mustChangePassword && <span className="badge" style={{ background: 'rgba(251,191,36,0.1)', color: 'var(--warning)' }}><KeyRound size={11} style={{ marginRight: 4 }} /> Doit changer MDP</span>}
           {isSelf && <span className="badge" style={{ background: 'rgba(74,222,128,0.1)', color: 'var(--success)' }}>Vous</span>}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -357,28 +358,28 @@ function UserRow({ u, currentUser, onBan, onUnban, onMute, onUnmute, onPromote, 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {/* Invisible toggle */}
           <button className="btn btn-secondary btn-sm" onClick={() => onToggleInvisible(u)} title="Masquer/afficher dans la liste des membres">
-            {u.invisible ? '👁️ Rendre visible' : '👻 Rendre invisible'}
+            {u.invisible ? <><Eye size={14} /> Rendre visible</> : <><EyeOff size={14} /> Rendre invisible</>}
           </button>
 
           {/* Mute/Unmute */}
           {u.muted ? (
-            <button className="btn btn-secondary btn-sm" onClick={() => onUnmute(u)}>🔊 Démuter</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => onUnmute(u)}><Volume2 size={14} /> Démuter</button>
           ) : (
-            <button className="btn btn-secondary btn-sm" onClick={() => onMute(u)}>🔇 Muter</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => onMute(u)}><VolumeX size={14} /> Muter</button>
           )}
 
           {/* Ban/Unban */}
           {u.banned ? (
-            <button className="btn btn-secondary btn-sm" onClick={() => onUnban(u)}>✅ Débannir</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => onUnban(u)}><Check size={14} /> Débannir</button>
           ) : (
-            <button className="btn btn-danger btn-sm" onClick={() => onBan(u)}>⛔ Bannir</button>
+            <button className="btn btn-danger btn-sm" onClick={() => onBan(u)}><Ban size={14} /> Bannir</button>
           )}
 
           {/* Promote/Demote */}
           {u.role === 'admin' ? (
-            <button className="btn btn-secondary btn-sm" onClick={() => onDemote(u)}>↓ Rétrograder</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => onDemote(u)}><ChevronsDown size={14} /> Rétrograder</button>
           ) : (
-            <button className="btn btn-secondary btn-sm" onClick={() => onPromote(u)}>↑ Promouvoir</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => onPromote(u)}><ChevronsUp size={14} /> Promouvoir</button>
           )}
         </div>
       )}
@@ -401,8 +402,8 @@ function MuteModal({ user, onMute, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
         <div className="modal-header">
-          <h3 className="modal-title">🔇 Muter {user.username}</h3>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+          <h3 className="modal-title">Muter {user.username}</h3>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

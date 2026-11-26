@@ -76,7 +76,7 @@ export function SocketProvider({ children }) {
       reconnectionAttempts: 10,
     });
 
-    s.on('connect', () => console.log('🔌 Socket connected'));
+    s.on('connect', () => console.log('Socket connected'));
     s.on('connect_error', (err) => {
       console.warn('Socket error:', err.message);
       if (err.message === 'Access denied' || err.message === 'Authentication required') {

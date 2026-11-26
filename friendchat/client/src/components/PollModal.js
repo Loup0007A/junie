@@ -1,5 +1,6 @@
 /* eslint-disable */
 import React, { useState } from 'react';
+import { BarChart3, X } from 'lucide-react';
 
 const MAX_OPTIONS = 10;
 
@@ -31,8 +32,8 @@ export default function PollModal({ onClose, onCreate }) {
     <div className="modal-overlay" onClick={onClose}>
       <form className="modal" onClick={e => e.stopPropagation()} onSubmit={submit}>
         <div className="modal-header">
-          <div className="modal-title">📊 Nouveau sondage</div>
-          <button type="button" className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+          <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}><BarChart3 size={20} style={{ color: 'var(--accent-light)' }} /> Nouveau sondage</div>
+          <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
         <div className="form-group" style={{ marginBottom: 14 }}>
           <label className="form-label">Question</label>
@@ -44,7 +45,7 @@ export default function PollModal({ onClose, onCreate }) {
             <div key={i} style={{ display: 'flex', gap: 6 }}>
               <input className="input" maxLength={100} value={o} onChange={e => setOption(i, e.target.value)} placeholder={`Choix ${i + 1}`} style={{ padding: '7px 10px' }} />
               {options.length > 2 && (
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => removeOption(i)} title="Retirer">✕</button>
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => removeOption(i)} title="Retirer" aria-label="Retirer ce choix"><X size={15} /></button>
               )}
             </div>
           ))}
