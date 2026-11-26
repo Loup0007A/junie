@@ -1,5 +1,7 @@
 /* eslint-disable */
 import React, { useState, useEffect, useRef } from 'react';
+import { Megaphone, X, Info } from 'lucide-react';
+import { stripEmoji } from '../hooks/text';
 import { useSocket } from '../hooks/useContexts';
 
 function ConfettiCanvas({ onDone }) {
@@ -116,13 +118,13 @@ function AnnouncementBanner({ text, by, onDone }) {
   return (
     <div style={{ position:'fixed', top:16, left:'50%', transform:'translateX(-50%)', zIndex:10000, maxWidth:'90vw', animation:'fc-drop .3s ease' }}>
       <style>{`@keyframes fc-drop { from{transform:translateX(-50%) translateY(-24px);opacity:0} to{transform:translateX(-50%) translateY(0);opacity:1} }`}</style>
-      <div style={{ background:'linear-gradient(135deg,var(--accent),var(--accent-light))', color:'#fff', padding:'14px 24px', borderRadius:14, boxShadow:'0 8px 32px rgba(124,92,191,.5)', display:'flex', alignItems:'center', gap:12, fontWeight:600, fontSize:15 }}>
-        <span style={{ fontSize:22 }}>📢</span>
+      <div style={{ background:'var(--accent)', color:'var(--on-accent)', padding:'14px 24px', borderRadius:14, boxShadow:'0 8px 32px var(--accent-glow)', display:'flex', alignItems:'center', gap:12, fontWeight:600, fontSize:15 }}>
+        <Megaphone size={22} />
         <div>
           <div>{text}</div>
           <div style={{ fontSize:11, opacity:.8, fontWeight:400, marginTop:2 }}>— {by}</div>
         </div>
-        <button onClick={onDone} style={{ background:'rgba(255,255,255,.2)', border:'none', color:'#fff', borderRadius:6, padding:'3px 10px', cursor:'pointer', marginLeft:8, fontSize:13 }}>✕</button>
+        <button onClick={onDone} aria-label="Fermer" style={{ background:'rgba(0,0,0,.15)', border:'none', color:'inherit', borderRadius:6, padding:'4px 6px', cursor:'pointer', marginLeft:8, display:'flex' }}><X size={15} /></button>
       </div>
     </div>
   );
@@ -133,8 +135,8 @@ function SystemToast({ content, onDone }) {
   return (
     <div style={{ position:'fixed', bottom:90, left:'50%', transform:'translateX(-50%)', zIndex:10000, maxWidth:460, width:'90vw', animation:'fc-drop .25s ease' }}>
       <div style={{ background:'var(--bg-elevated)', border:'1px solid var(--accent)', borderRadius:12, padding:'12px 18px', boxShadow:'var(--shadow-lg)', fontSize:13, lineHeight:1.65, whiteSpace:'pre-line', color:'var(--text-primary)' }}>
-        <span style={{ fontSize:15, fontWeight:600, color:'var(--accent-light)' }}>🤖 Système</span>
-        <div style={{ marginTop:6 }}>{content}</div>
+        <span style={{ fontSize:14, fontWeight:700, color:'var(--accent-light)', display:'flex', alignItems:'center', gap:6 }}><Info size={15} /> Info</span>
+        <div style={{ marginTop:6 }}>{stripEmoji(content)}</div>
         <button onClick={onDone} style={{ marginTop:8, fontSize:11, color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer' }}>Fermer</button>
       </div>
     </div>
@@ -163,9 +165,9 @@ export default function FunEffects({ onChatCleared }) {
       fx_disco: () => setDisco(true),
       announcement: ({ text, by }) => setAnnouncement({ text, by }),
       system_message: ({ content }) => setSystemMsg(content),
-      muted: ({ until } = {}) => setSystemMsg(`🔇 Tu es muet(te)${until ? ` jusqu'à ${new Date(until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''} : ton message n'a pas été envoyé.`),
-      account_muted: ({ until, auto, reason } = {}) => setSystemMsg(`🔇 ${auto ? `Mute automatique (${reason})` : 'Un admin t\'a rendu muet(te)'}${until ? ` jusqu'à ${new Date(until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}.`),
-      chat_cleared: ({ by }) => { onChatCleared && onChatCleared(by); setSystemMsg(`🧹 Le chat a été effacé par ${by}`); },
+      muted: ({ until } = {}) => setSystemMsg(`Tu es muet(te)${until ? ` jusqu'à ${new Date(until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''} : ton message n'a pas été envoyé.`),
+      account_muted: ({ until, auto, reason } = {}) => setSystemMsg(`${auto ? `Mute automatique (${reason})` : 'Un admin t\'a rendu muet(te)'}${until ? ` jusqu'à ${new Date(until).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : ''}.`),
+      chat_cleared: ({ by }) => { onChatCleared && onChatCleared(by); setSystemMsg(`Le chat a été effacé par ${by}.`); },
     };
     Object.entries(h).forEach(([e, fn]) => socket.on(e, fn));
     return () => Object.entries(h).forEach(([e, fn]) => socket.off(e, fn));

@@ -26,6 +26,25 @@ Un chat privé entre amis — beau, sécurisé, et simple à déployer.
   - Citations `> texte`
   - Couleurs : rouge, vert, bleu, violet, jaune, orange, rose
 
+### Apparence
+- **5 thèmes « Voyelles »** inspirés du sonnet de Rimbaud : A noir (or), E blanc (clair), I rouge, U vert, O bleu — bouton palette en bas de la barre latérale
+- Taille du texte des messages (petit / normal / grand), mémorisée dans le navigateur
+- Icônes vectorielles (Lucide) partout dans l'interface, polices intégrées au site (Bricolage Grotesque, Figtree, Newsreader pour les poèmes)
+- **Emojis façon WhatsApp** : un message de 1 à 3 emojis s'affiche en grand, sans bulle ; les emojis dans le texte sont légèrement agrandis
+- Version mobile : barre latérale en tiroir (bouton menu)
+
+### Profils et présence
+- **Carte de profil** au clic sur un avatar ou un pseudo : bio, statut, membre depuis, dernière visite, nombre de messages, points Rimbaud, bouton « Envoyer un message privé »
+- **Statut personnalisé** (emoji + texte) et disponibilité : En ligne, Absent, **Ne pas déranger** (aucun son ni notification)
+- Recherche de membres dans la barre latérale, couleur de pseudo propre à chacun
+
+### Conversations
+- **Historique infini** : les anciens messages se chargent en remontant ; bouton « nouveaux messages » quand on lit plus haut
+- **Messages épinglés** (admins dans le chat global, les deux participants en MP) avec barre d'accès rapide
+- **« Vu »** sous ton dernier message privé quand l'autre l'a lu
+- **Brouillons** conservés par conversation
+- Aperçu des vidéos **YouTube** (lecture intégrée) et des liens d'images
+
 ### Interactions
 - 😍 **Réactions emoji** sur les messages (👍 ❤️ 😂 😮 😢 🔥…) — survol d'un message, clic sur une réaction pour l'ajouter/retirer
 - ↩️ **Répondre à un message** : la citation s'affiche au-dessus de la réponse, un clic ramène au message d'origine
@@ -224,7 +243,11 @@ friendchat/
 │   │   │   ├── MessageInput.js  # Saisie + emoji + GIF + upload + @mentions
 │   │   │   ├── RimbaudGame.js   # Panneau du jeu Rimbaud
 │   │   │   ├── RimbaudPicker.js # Sélecteur poème / coupure
-│   │   │   └── PollModal.js     # Création de sondage
+│   │   │   ├── PollModal.js     # Création de sondage
+│   │   │   ├── ProfileCard.js   # Carte de profil
+│   │   │   ├── StatusModal.js   # Statut et disponibilité
+│   │   │   ├── AppearanceModal.js # Thèmes Voyelles
+│   │   │   └── AuthBrand.js     # Logo des pages de connexion
 │   │   └── styles/
 │   │       └── global.css
 │   ├── public/
@@ -297,6 +320,6 @@ tar -czf backup-$(date +%Y%m%d).tar.gz server/data/ server/uploads/
 | Côté | Stack |
 |------|-------|
 | Backend | Node.js, Express, Socket.io, NeDB, JWT, bcrypt, multer |
-| Frontend | React 18, React Router 6, Socket.io-client, axios |
+| Frontend | React 18, React Router 6, Socket.io-client, axios, lucide-react, Fontsource |
 | Chat | emoji-picker-react, Giphy API, Tenor API |
 | Déploiement | Docker, PM2, Nginx |

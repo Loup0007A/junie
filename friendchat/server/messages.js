@@ -20,6 +20,7 @@ function serializeMessage(m, avatar = null) {
     reactions: m.reactions || {},
     reply_to: m.replyTo || null,
     edited_at: m.editedAt || null,
+    pinned: m.pinned || null,
   };
   if (m.poll) out.poll = m.poll;
   if (m.room) out.room = m.room;

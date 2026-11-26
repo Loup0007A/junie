@@ -1,5 +1,7 @@
 /* eslint-disable */
 import React, { useState } from 'react';
+import { Lock } from 'lucide-react';
+import AuthBrand from '../components/AuthBrand';
 import { useAuth } from '../hooks/useContexts';
 
 export default function LoginPage() {
@@ -27,8 +29,7 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="auth-logo-icon">💬</div>
-          <h1 className="auth-title">FriendChat</h1>
+          <AuthBrand />
           <p className="auth-subtitle">Votre espace privé entre amis</p>
         </div>
 
@@ -78,11 +79,9 @@ export default function LoginPage() {
           <a href="/register">Faire une demande d'inscription</a>
         </div>
 
-        <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(124,92,191,0.08)', borderRadius: 8, border: '1px solid rgba(124,92,191,0.15)' }}>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-            🔒 Ce chat est privé — accès uniquement sur invitation de l'administrateur
-          </p>
-        </div>
+        <p style={{ marginTop: 18, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
+          <Lock size={12} /> Chat privé : l'administrateur valide chaque inscription.
+        </p>
       </div>
     </div>
   );

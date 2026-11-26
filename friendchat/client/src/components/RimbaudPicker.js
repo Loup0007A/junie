@@ -1,8 +1,9 @@
 /* eslint-disable */
 import React, { useState, useEffect, useMemo } from 'react';
+import { Feather, X, Crosshair, Dices } from 'lucide-react';
 import { api } from '../hooks/useContexts';
 
-const SERIF = "Georgia, 'Times New Roman', serif";
+const SERIF = 'var(--font-poem)';
 const DURATIONS = [[60, '1 min'], [90, '1 min 30'], [120, '2 min'], [180, '3 min'], [300, '5 min']];
 
 /**
@@ -61,14 +62,14 @@ export default function RimbaudPicker({ onClose, onStart, error }) {
         style={{ maxWidth: 920, width: '95vw', height: '86vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 22 }}>🪶</span>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--accent-dim)', color: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Feather size={18} /></span>
           <div style={{ flex: 1 }}>
             <div className="modal-title">Choisir le vers à compléter</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Choisis un poème puis <b>clique sur le mot</b> à partir duquel les autres devront compléter le vers.
             </div>
           </div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} title="Fermer">✕</button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} title="Fermer" aria-label="Fermer"><X size={18} /></button>
         </div>
 
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -144,8 +145,8 @@ export default function RimbaudPicker({ onClose, onStart, error }) {
           </div>
           {error && <div className="alert alert-error" style={{ padding: '6px 10px', fontSize: 12 }}>{error}</div>}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary btn-sm" onClick={pickRandomCut} disabled={!poem} title="Choisit un vers et une coupure au hasard dans ce poème (tu pourras ajuster)">🎯 Coupure au hasard</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setSending(true); onStart({ duration }); }} disabled={sending} title="Poème et vers au hasard : tu peux jouer aussi">🎲 Partie 100 % hasard</button>
+            <button className="btn btn-secondary btn-sm" onClick={pickRandomCut} disabled={!poem} title="Choisit un vers et une coupure au hasard dans ce poème (tu pourras ajuster)"><Crosshair size={14} /> Coupure au hasard</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setSending(true); onStart({ duration }); }} disabled={sending} title="Poème et vers au hasard : tu peux jouer aussi"><Dices size={14} /> Partie 100 % hasard</button>
             <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               Durée
               <select className="input" value={duration} onChange={e => setDuration(Number(e.target.value))} style={{ padding: '4px 8px', width: 'auto' }}>

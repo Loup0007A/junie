@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { MailCheck } from 'lucide-react';
+import AuthBrand from '../components/AuthBrand';
 import { api } from '../hooks/useContexts';
 
 export default function RegisterPage() {
@@ -32,7 +34,7 @@ export default function RegisterPage() {
   if (success) return (
     <div className="auth-page">
       <div className="auth-card" style={{ textAlign: 'center' }}>
-        <div className="auth-logo-icon" style={{ margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✅</div>
+        <div style={{ width: 56, height: 56, borderRadius: 16, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--accent-dim)', color: 'var(--accent-light)' }}><MailCheck size={26} /></div>
         <h2 style={{ marginBottom: 12 }}>Demande envoyée !</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
           Votre demande d'inscription a été soumise à l'administrateur. Vous serez notifié(e) dès qu'elle sera traitée.
@@ -46,7 +48,7 @@ export default function RegisterPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="auth-logo-icon">📝</div>
+          <AuthBrand compact />
           <h1 className="auth-title">Rejoindre FriendChat</h1>
           <p className="auth-subtitle">Votre demande sera examinée par l'admin</p>
         </div>

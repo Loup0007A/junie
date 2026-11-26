@@ -5,13 +5,14 @@ import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
 import FunEffects from '../components/FunEffects';
 import RimbaudGame from '../components/RimbaudGame';
+import ProfileCard from '../components/ProfileCard';
 import { mentionsUser } from '../components/MessageBubble';
 import { playPing, showNotification } from '../hooks/notify';
 
 // Strip markdown/HTML-ish noise for notification bodies
 const plain = (msg) => msg.type === 'text'
   ? msg.content.replace(/<[^>]+>/g, '').replace(/[*~`>]/g, '')
-  : msg.type === 'gif' ? '🎞️ GIF' : msg.type === 'poll' ? `📊 Sondage : ${msg.content}` : '📸 Image';
+  : msg.type === 'gif' ? 'GIF' : msg.type === 'poll' ? `Sondage : ${msg.content}` : 'Image';
 
 export default function ChatPage() {
   const { socket } = useSocket();
@@ -21,6 +22,8 @@ export default function ChatPage() {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [chatClearedTs, setChatClearedTs] = useState(null);
   const [hiddenUnread, setHiddenUnread] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const dnd = user.presence === 'dnd';
   const baseTitle = useRef(document.title);
 
   useEffect(() => {
@@ -52,18 +55,18 @@ export default function ChatPage() {
           [msg.sender_id]: (prev[msg.sender_id] || 0) + 1
         }));
       }
-      if (!viewing || document.hidden) {
+      if ((!viewing || document.hidden) && !dnd) {
         playPing();
-        showNotification(`💬 ${msg.sender_name}`, plain(msg));
+        showNotification(`${msg.sender_name} (message privé)`, plain(msg));
       }
       if (document.hidden) setHiddenUnread(n => n + 1);
     };
     const handleNewGlobal = (msg) => {
       if (msg.sender_id === user.id || msg.sender_id === 'system') return;
       const mentioned = msg.type === 'text' && mentionsUser(msg.content, user.username);
-      if (mentioned) {
+      if (mentioned && !dnd) {
         playPing();
-        showNotification(`📣 ${msg.sender_name} t'a mentionné`, plain(msg), () => { setActiveChat('global'); setChatUser(null); });
+        showNotification(`${msg.sender_name} t'a mentionné`, plain(msg), () => { setActiveChat('global'); setChatUser(null); });
       }
       if (document.hidden) setHiddenUnread(n => n + 1);
     };
@@ -73,7 +76,7 @@ export default function ChatPage() {
       socket.off('new_private_message', handleNewPM);
       socket.off('new_global_message', handleNewGlobal);
     };
-  }, [socket, activeChat, user.id, user.username]);
+  }, [socket, activeChat, user.id, user.username, dnd]);
 
   const handleSelectChat = (id, user = null) => {
     setActiveChat(id);
@@ -93,13 +96,18 @@ export default function ChatPage() {
         activeChat={activeChat}
         onSelectChat={handleSelectChat}
         unreadCounts={unreadCounts}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
       />
       <ChatWindow
         key={activeChat}
         chatId={activeChat}
         chatUser={chatUser}
         clearedTs={chatClearedTs}
+        onOpenMenu={() => setDrawerOpen(true)}
+        menuBadge={Object.values(unreadCounts).reduce((a, b) => a + b, 0)}
       />
+      <ProfileCard onMessage={(u) => handleSelectChat(`pm-${u.id}`, u)} />
       <FunEffects onChatCleared={handleChatCleared} />
       <RimbaudGame />
     </div>
