@@ -5,14 +5,83 @@ import MessageBubble, { DateDivider } from './MessageBubble';
 import MessageInput from './MessageInput';
 import { Avatar } from './Sidebar';
 import { openRimbaudPicker } from './RimbaudGame';
+import PollModal from './PollModal';
 import { isSoundOn, setSoundOn, notificationPermission, notificationsSupported, requestNotifications } from '../hooks/notify';
 
 // Header buttons: start the Rimbaud game, toggle sounds, enable browser notifications
-function HeaderTools({ isGlobal, onRimbaud }) {
+// ─── Recherche dans la conversation ─────────────────────────
+function Highlight({ text, query }) {
+  const q = query.trim();
+  if (!q) return text;
+  const parts = text.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig'));
+  return parts.map((p, i) => p.toLowerCase() === q.toLowerCase() ? <mark key={i}>{p}</mark> : <React.Fragment key={i}>{p}</React.Fragment>);
+}
+
+function SearchPanel({ withId, onJumpTo, onClose }) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+  const debounce = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(debounce.current);
+    if (q.trim().length < 2) { setResults([]); return; }
+    debounce.current = setTimeout(() => {
+      setLoading(true);
+      api.get('/api/messages/search', { params: { q: q.trim(), with: withId } })
+        .then(r => setResults(r.data)).catch(() => setResults([])).finally(() => setLoading(false));
+    }, 300);
+  }, [q, withId]);
+
+  const open = (r) => {
+    // Jump to the message if it is loaded, otherwise show it in full here
+    if (document.getElementById(`msg-${r.id}`)) onJumpTo(r.id);
+    else setExpanded(expanded === r.id ? null : r.id);
+  };
+
+  return (
+    <div className="search-panel">
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <span>🔍</span>
+        <input
+          className="input"
+          autoFocus
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          onKeyDown={e => e.key === 'Escape' && onClose()}
+          placeholder="Rechercher dans cette conversation…"
+          style={{ flex: 1, padding: '6px 10px' }}
+        />
+        {loading && <span className="spinner" />}
+        <button className="btn btn-ghost btn-icon" onClick={onClose} title="Fermer (Échap)">✕</button>
+      </div>
+      {q.trim().length >= 2 && (
+        <div className="search-results">
+          {!loading && results.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 6 }}>Aucun résultat.</div>}
+          {results.map(r => (
+            <button key={r.id} className="search-result" onClick={() => open(r)}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                <b style={{ color: 'var(--text-secondary)' }}>{r.sender_name}</b> · {new Date(r.created_at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {r.type === 'poll' && ' · 📊 sondage'}
+              </div>
+              <div style={expanded === r.id ? { whiteSpace: 'pre-wrap' } : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Highlight text={r.content} query={q} />
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HeaderTools({ isGlobal, onRimbaud, onSearch, searching }) {
   const [sound, setSound] = useState(isSoundOn());
   const [perm, setPerm] = useState(notificationPermission());
   return (
     <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+      <button className={`btn btn-sm ${searching ? 'btn-secondary' : 'btn-ghost'}`} onClick={onSearch} title="Rechercher dans la conversation (Ctrl+F)">🔍</button>
       {isGlobal && (
         <button className="btn btn-ghost btn-sm" onClick={onRimbaud} title="Jeu : complète un vers de Rimbaud (/rimbaud)">🪶 Rimbaud</button>
       )}
@@ -58,6 +127,9 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showPoll, setShowPoll] = useState(false);
   const bottomRef = useRef(null);
   const typingTimeout = useRef({});
   const isGlobal = chatId === 'global';
@@ -132,6 +204,11 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
       setMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m));
     };
 
+    // Edits and poll votes
+    const handleUpdated = ({ id, ...patch }) => {
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
+    };
+
     const handleTyping = ({ userId, username, room }) => {
       const relevantRoom = isGlobal ? 'global' : `pm-${chatUser?.id}`;
       if (room === relevantRoom && userId !== user.id) {
@@ -155,6 +232,7 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
     socket.on('new_private_message', handleNewPrivate);
     socket.on('message_deleted', handleDeleted);
     socket.on('message_reactions', handleReactions);
+    socket.on('message_updated', handleUpdated);
     socket.on('user_typing', handleTyping);
     socket.on('user_stop_typing', handleStopTyping);
 
@@ -163,6 +241,7 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
       socket.off('new_private_message', handleNewPrivate);
       socket.off('message_deleted', handleDeleted);
       socket.off('message_reactions', handleReactions);
+      socket.off('message_updated', handleUpdated);
       socket.off('user_typing', handleTyping);
       socket.off('user_stop_typing', handleStopTyping);
     };
@@ -183,6 +262,34 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
   const handleReact = useCallback((messageId, emoji) => {
     socket?.emit('toggle_reaction', { messageId, emoji, scope: isGlobal ? 'global' : 'private' });
   }, [socket, isGlobal]);
+
+  const scope = isGlobal ? 'global' : 'private';
+  const handleSaveEdit = useCallback((messageId, content) => {
+    socket?.emit('edit_message', { messageId, content, scope });
+    setEditingId(null);
+  }, [socket, scope]);
+  const handleDeleteOwn = useCallback((messageId) => {
+    if (!window.confirm('Supprimer ton message ?')) return;
+    socket?.emit('delete_own_message', { messageId, scope });
+  }, [socket, scope]);
+  const handleEditLast = useCallback(() => {
+    const last = [...messages].reverse().find(m => m.sender_id === user.id && !m.deleted && (m.type || 'text') === 'text');
+    if (last) setEditingId(last.id);
+    return !!last;
+  }, [messages, user.id]);
+  const handleVote = useCallback((messageId, index) => socket?.emit('poll_vote', { messageId, index }), [socket]);
+  const handleClosePoll = useCallback((messageId) => {
+    if (window.confirm('Clore ce sondage ? Plus personne ne pourra voter.')) socket?.emit('poll_close', { messageId });
+  }, [socket]);
+
+  // Ctrl/Cmd+F opens the search panel
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); setShowSearch(true); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const handleJumpTo = useCallback((id) => {
     const el = document.getElementById(`msg-${id}`);
@@ -244,8 +351,12 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
             )}
           </>
         )}
-        <HeaderTools isGlobal={isGlobal} onRimbaud={openRimbaudPicker} />
+        <HeaderTools isGlobal={isGlobal} onRimbaud={openRimbaudPicker} onSearch={() => setShowSearch(v => !v)} searching={showSearch} />
       </div>
+
+      {showSearch && (
+        <SearchPanel withId={isGlobal ? 'global' : chatUser?.id} onJumpTo={handleJumpTo} onClose={() => setShowSearch(false)} />
+      )}
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
@@ -277,6 +388,13 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
                   onReact={handleReact}
                   onReply={setReplyingTo}
                   onJumpTo={handleJumpTo}
+                  editing={editingId === item.message.id}
+                  onStartEdit={setEditingId}
+                  onSaveEdit={handleSaveEdit}
+                  onCancelEdit={() => setEditingId(null)}
+                  onDeleteOwn={handleDeleteOwn}
+                  onVote={handleVote}
+                  onClosePoll={handleClosePoll}
                 />
               )
             )}
@@ -308,6 +426,13 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
         </div>
       )}
 
+      {showPoll && (
+        <PollModal
+          onClose={() => setShowPoll(false)}
+          onCreate={(poll) => { socket?.emit('create_poll', poll); setShowPoll(false); }}
+        />
+      )}
+
       {/* Input */}
       <MessageInput
         onSend={handleSend}
@@ -315,6 +440,8 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
         disabled={isMuted}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
+        onEditLast={handleEditLast}
+        onOpenPoll={isGlobal ? () => setShowPoll(true) : null}
         placeholder={isGlobal ? 'Message dans le chat global…' : `Message privé à ${chatUser?.username}…`}
       />
     </div>

@@ -13,8 +13,10 @@ const PUBLIC_COMMANDS = [
   { cmd: '/rimbaud liste', desc: 'Poèmes disponibles 📜' },
   { cmd: '/rimbaud indice', desc: 'Révèle un mot (-1 pt) 💡' },
   { cmd: '/scores', desc: 'Classement du jeu Rimbaud 🏆' },
+  { cmd: '/sondage', desc: 'Crée un sondage 📊', example: '/sondage Pizza ou sushi ? | Pizza | Sushi' },
 ];
 const ADMIN_COMMANDS = [
+  { cmd: '/filtre', desc: 'Filtre anti-insultes 🧼', example: '/filtre autoriser mot' },
   { cmd: '/announce', desc: 'Annonce à tous', example: '/announce Bonne nuit !' },
   { cmd: '/shake', desc: 'Fait trembler l\'écran' },
   { cmd: '/confetti', desc: 'Lance des confettis 🎊' },
@@ -32,7 +34,7 @@ const ADMIN_COMMANDS = [
   { cmd: '/clear', desc: 'Efface l\'affichage du chat' },
 ];
 
-export default function MessageInput({ onSend, onTyping, disabled, placeholder = 'Écrire un message…', replyingTo, onCancelReply }) {
+export default function MessageInput({ onSend, onTyping, disabled, placeholder = 'Écrire un message…', replyingTo, onCancelReply, onEditLast, onOpenPoll }) {
   const { user } = useAuth();
   const [text, setText] = useState('');
   const [caret, setCaret] = useState(0);
@@ -120,6 +122,11 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
     if (e.key === 'Tab' && filteredCmds.length > 0) {
       e.preventDefault();
       pickCommand(filteredCmds[0]);
+      return;
+    }
+    // ↑ in an empty input edits your last message
+    if (e.key === 'ArrowUp' && !text && onEditLast) {
+      if (onEditLast()) e.preventDefault();
       return;
     }
     if (e.key === 'Escape' && replyingTo && onCancelReply) {
@@ -334,7 +341,7 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
           <span style={{ color: 'var(--text-muted)' }}>↩ Réponse à</span>
           <b>{replyingTo.sender_name}</b>
           <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {replyingTo.type === 'text' ? stripMarkup(replyingTo.content) : replyingTo.type === 'gif' ? '🎞️ GIF' : '📸 Image'}
+            {replyingTo.type === 'text' ? stripMarkup(replyingTo.content) : replyingTo.type === 'gif' ? '🎞️ GIF' : replyingTo.type === 'poll' ? `📊 ${replyingTo.content}` : '📸 Image'}
           </span>
           <button type="button" className="btn btn-ghost" style={{ padding: '0 6px' }} onClick={onCancelReply} title="Annuler (Échap)">✕</button>
         </div>
@@ -437,6 +444,13 @@ export default function MessageInput({ onSend, onTyping, disabled, placeholder =
             </div>
           )}
         </div>
+
+        {/* Poll */}
+        {onOpenPoll && (
+          <button type="button" className="btn btn-ghost btn-icon" onClick={onOpenPoll} disabled={disabled} title="Créer un sondage">
+            <span style={{ fontSize: 17 }}>📊</span>
+          </button>
+        )}
 
         {/* Image upload */}
         <button type="button" className="btn btn-ghost btn-icon" onClick={() => fileInputRef.current?.click()} disabled={uploading} title="Envoyer une image">

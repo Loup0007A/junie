@@ -11,6 +11,7 @@ const db = {
   privateMessages: Datastore.create({ filename: path.join(DATA_DIR, 'private_messages.db'), autoload: true }),
   requests: Datastore.create({ filename: path.join(DATA_DIR, 'requests.db'), autoload: true }),
   scores: Datastore.create({ filename: path.join(DATA_DIR, 'scores.db'), autoload: true }),
+  settings: Datastore.create({ filename: path.join(DATA_DIR, 'settings.db'), autoload: true }),
 };
 
 async function initIndexes() {

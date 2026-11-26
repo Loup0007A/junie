@@ -1,5 +1,5 @@
 /* eslint-disable */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useContexts';
 import { Avatar } from './Sidebar';
 import { format, isToday, isYesterday } from 'date-fns';
@@ -63,7 +63,76 @@ function formatTimestamp(ts) {
   return format(date, 'dd MMM HH:mm', { locale: fr });
 }
 
-export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelete, onReact, onReply, onJumpTo, canDelete = true }) {
+// ─── Sondage ─────────────────────────────────────────────────
+function PollCard({ message, isOwn, onVote, onClose }) {
+  const { user } = useAuth();
+  const poll = message.poll;
+  const total = poll.options.reduce((n, o) => n + o.votes.length, 0);
+  const voters = new Set(poll.options.flatMap(o => o.votes)).size;
+  const canClose = !poll.closed && (message.sender_id === user?.id || user?.role === 'admin');
+  return (
+    <div className="poll-card">
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>📊 {message.content}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+        {poll.closed ? 'Sondage clos' : poll.multi ? 'Plusieurs choix possibles' : 'Un seul choix'} · {voters} votant{voters > 1 ? 's' : ''}
+      </div>
+      {poll.options.map((o, i) => {
+        const pct = total ? Math.round((o.votes.length / total) * 100) : 0;
+        const mine = o.votes.includes(user?.username);
+        return (
+          <button
+            key={i}
+            type="button"
+            className={`poll-option${mine ? ' mine' : ''}`}
+            disabled={poll.closed}
+            onClick={() => onVote && onVote(message.id, i)}
+            title={o.votes.length ? o.votes.join(', ') : 'Aucun vote'}
+          >
+            <span className="poll-bar" style={{ width: `${pct}%` }} />
+            <span style={{ position: 'relative', flex: 1, textAlign: 'left' }}>{mine ? '✅ ' : ''}{o.text}</span>
+            <span style={{ position: 'relative', fontSize: 12, color: 'var(--text-secondary)' }}>{o.votes.length} · {pct} %</span>
+          </button>
+        );
+      })}
+      {canClose && (
+        <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => onClose && onClose(message.id)}>
+          🔒 Clore le sondage
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Édition en place ───────────────────────────────────────
+function EditBox({ initial, onSave, onCancel }) {
+  const [value, setValue] = useState(initial);
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, []);
+  const save = () => { const v = value.trim(); if (v && v !== initial) onSave(v); else onCancel(); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 260 }}>
+      <textarea
+        ref={ref}
+        className="input"
+        value={value}
+        rows={Math.min(6, value.split('\n').length + 1)}
+        maxLength={2000}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        }}
+        style={{ resize: 'vertical', fontSize: 14, padding: '8px 10px', fontFamily: 'var(--font-body)' }}
+      />
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Entrée pour enregistrer · Échap pour annuler</span>
+    </div>
+  );
+}
+
+export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelete, onReact, onReply, onJumpTo, canDelete = true, editing = false, onStartEdit, onSaveEdit, onCancelEdit, onDeleteOwn, onVote, onClosePoll }) {
   const { user } = useAuth();
   const [showActions, setShowActions] = useState(false);
   const [imgModal, setImgModal] = useState(null);
@@ -127,7 +196,11 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
 
           {/* Content */}
           <div style={{ position: 'relative' }}>
-            {message.type === 'gif' ? (
+            {message.type === 'poll' && message.poll ? (
+              <PollCard message={message} isOwn={isOwn} onVote={onVote} onClose={onClosePoll} />
+            ) : editing ? (
+              <EditBox initial={message.content} onSave={(v) => onSaveEdit && onSaveEdit(message.id, v)} onCancel={() => onCancelEdit && onCancelEdit()} />
+            ) : message.type === 'gif' ? (
               <img
                 src={message.content}
                 alt="GIF"
@@ -180,6 +253,10 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
             )}
           </div>
 
+          {message.edited_at && !editing && (
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }} title={`Modifié le ${new Date(message.edited_at).toLocaleString('fr-FR')}`}>(modifié)</span>
+          )}
+
           {/* Reactions */}
           {reactions.length > 0 && (
             <div className="reaction-row" style={{ justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
@@ -199,7 +276,7 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
         </div>
 
         {/* Hover actions: reactions, reply, admin delete */}
-        {showActions && !isSystem && (
+        {showActions && !isSystem && !editing && (
           <div className="msg-actions">
             {onReact && QUICK_REACTIONS.slice(0, 6).map(e => (
               <button key={e} type="button" onClick={() => onReact(message.id, e)} title={`Réagir ${e}`}>{e}</button>
@@ -207,7 +284,17 @@ export default function MessageBubble({ message, showAvatar, isOwn, onAdminDelet
             {onReply && (
               <button type="button" onClick={() => onReply(message)} title="Répondre">↩️</button>
             )}
-            {isAdmin && canDelete && (
+            {isOwn && message.type === 'text' && onStartEdit && (
+              <button type="button" onClick={() => onStartEdit(message.id)} title="Modifier (ou ↑ dans la zone de saisie)">✏️</button>
+            )}
+            {isOwn && onDeleteOwn && (
+              <button type="button" onClick={() => onDeleteOwn(message.id)} title="Supprimer mon message">
+                <svg width="14" height="14" fill="none" stroke="var(--danger)" strokeWidth="2" viewBox="0 0 24 24">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            )}
+            {!isOwn && isAdmin && canDelete && (
               <button type="button" onClick={() => onAdminDelete && onAdminDelete(message.id)} title="Supprimer ce message">
                 <svg width="14" height="14" fill="none" stroke="var(--danger)" strokeWidth="2" viewBox="0 0 24 24">
                   <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>

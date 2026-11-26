@@ -4,7 +4,8 @@
 //  Une partie à la fois, partagée par tout le chat global :
 //   - on affiche le début d'un poème et le début d'un vers,
 //   - le premier qui complète correctement le vers gagne des points,
-//   - indices (un mot révélé à chaque fois, -1 point), minuteur,
+//   - indices (un mot révélé à chaque fois, -1 point, un seul par joueur
+//     sauf pour le créateur de la partie), minuteur,
 //   - le lanceur peut choisir lui-même le poème et le mot de coupure
 //     (dans ce cas il ne peut pas répondre : il connaît la réponse).
 // ─────────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ function buildGame({ poem, line, shown, duration, starter, chosen }) {
     context: lines.slice(from, line),
     truncated: from > 0,
     hints: 0,
+    hintUsers: [],               // qui a déjà demandé son indice (1 par personne, sauf le créateur)
     starter: { id: starter.id, username: starter.username },
     chosen,
     startedAt: Date.now(),
@@ -172,6 +174,7 @@ function publicState(g) {
     prefix: g.words.slice(0, g.shown).join(' '),
     hiddenCount: g.hidden.length,
     hintWords: g.hidden.slice(0, g.hints),
+    hintsBy: g.hintUsers.map(u => u.username),
     points: Math.max(1, BASE_POINTS - g.hints),
     startedBy: g.starter.username,
     starterId: g.starter.id,
@@ -280,7 +283,12 @@ function checkAnswer(io, user, text, { silent = false } = {}) {
 function giveHint(io, user) {
   if (!game || game.status !== 'playing') return { error: 'Aucune partie en cours.' };
   if (game.hints >= game.hidden.length - 1) return { error: 'Plus d’indice possible : il ne reste qu’un mot à trouver !' };
+  const isStarter = user.id === game.starter.id;
+  if (!isStarter && game.hintUsers.some(u => u.id === user.id)) {
+    return { error: 'Tu as déjà utilisé ton indice pour cette partie (un seul par personne).' };
+  }
   game.hints += 1;
+  if (!isStarter) game.hintUsers.push({ id: user.id, username: user.username });
   broadcast(io);
   return { ok: true, message: `💡 ${user.username} a demandé un indice.` };
 }
