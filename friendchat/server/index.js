@@ -10,6 +10,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { db, initIndexes } = require('./db');
 const { handleCommand } = require('./commands');
+const rimbaud = require('./rimbaud');
 
 const app = express();
 const server = http.createServer(app);
@@ -157,15 +158,50 @@ app.put('/api/users/profile', auth, upload.single('avatar'), async (req, res) =>
 });
 
 // ─── Messages ───────────────────────────────────────────────
+const HISTORY_LIMIT = 150;
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
+
+// Strictly increasing timestamps so messages sent in the same millisecond keep their order
+let lastMsgTs = 0;
+const nextMsgTs = () => (lastMsgTs = Math.max(Date.now(), lastMsgTs + 1));
+
+// Shape shared by REST history and live socket events
+function serializeMessage(m, avatar = null) {
+  const out = {
+    id: m.id, sender_id: m.senderId, sender_name: m.senderName,
+    content: m.content, type: m.type || 'text', created_at: m.createdAt,
+    deleted: m.deleted || false, avatar,
+    reactions: m.reactions || {},
+    reply_to: m.replyTo || null,
+  };
+  if (m.room) out.room = m.room;
+  if (m.receiverId) { out.receiver_id = m.receiverId; out.read = m.read || false; }
+  return out;
+}
+
+// Small snapshot of the message being replied to (kept even if the original is later deleted)
+async function buildReplySnapshot(store, replyToId, filter = {}) {
+  if (!replyToId || typeof replyToId !== 'string') return null;
+  const orig = await store.findOne({ id: replyToId, deleted: { $ne: true }, ...filter });
+  if (!orig) return null;
+  const excerpt = orig.type === 'text' ? orig.content.slice(0, 140) : (orig.type === 'gif' ? '🎞️ GIF' : '📸 Image');
+  return { id: orig.id, sender_name: orig.senderName, excerpt, type: orig.type || 'text' };
+}
+
+async function avatarMapFor(msgs) {
+  const userIds = [...new Set(msgs.map(m => m.senderId))];
+  const users = await db.users.find({ id: { $in: userIds } });
+  const map = {};
+  users.forEach(u => map[u.id] = u.avatar || null);
+  return map;
+}
+
 app.get('/api/messages/global', auth, async (req, res) => {
   try {
-    const msgs = await db.messages.find({ room: 'global', deleted: { $ne: true } }).sort({ createdAt: 1 }).limit(100);
-    // Attach avatars
-    const userIds = [...new Set(msgs.map(m => m.senderId))];
-    const users = await db.users.find({ id: { $in: userIds } });
-    const avatarMap = {};
-    users.forEach(u => avatarMap[u.id] = u.avatar || null);
-    res.json(msgs.map(m => ({ id: m.id, room: m.room, sender_id: m.senderId, sender_name: m.senderName, content: m.content, type: m.type || 'text', created_at: m.createdAt, deleted: m.deleted || false, avatar: avatarMap[m.senderId] || null })));
+    // Most recent messages first, then put back in chronological order
+    const msgs = (await db.messages.find({ room: 'global', deleted: { $ne: true } }).sort({ createdAt: -1 }).limit(HISTORY_LIMIT)).reverse();
+    const avatarMap = await avatarMapFor(msgs);
+    res.json(msgs.map(m => serializeMessage(m, avatarMap[m.senderId] || null)));
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -175,17 +211,14 @@ app.get('/api/messages/private/:userId', auth, async (req, res) => {
     const msgs = await db.privateMessages.find({
       $or: [{ senderId: req.user.id, receiverId: userId }, { senderId: userId, receiverId: req.user.id }],
       deleted: { $ne: true }
-    }).sort({ createdAt: 1 }).limit(100);
+    }).sort({ createdAt: -1 }).limit(HISTORY_LIMIT);
+    msgs.reverse();
 
     // Mark as read
     await db.privateMessages.update({ senderId: userId, receiverId: req.user.id, read: false }, { $set: { read: true } }, { multi: true });
 
-    const userIds = [...new Set(msgs.map(m => m.senderId))];
-    const users = await db.users.find({ id: { $in: userIds } });
-    const avatarMap = {};
-    users.forEach(u => avatarMap[u.id] = u.avatar || null);
-
-    res.json(msgs.map(m => ({ id: m.id, sender_id: m.senderId, sender_name: m.senderName, receiver_id: m.receiverId, content: m.content, type: m.type || 'text', created_at: m.createdAt, read: m.read || false, deleted: m.deleted || false, avatar: avatarMap[m.senderId] || null })));
+    const avatarMap = await avatarMapFor(msgs);
+    res.json(msgs.map(m => serializeMessage(m, avatarMap[m.senderId] || null)));
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -196,6 +229,12 @@ app.get('/api/messages/unread', auth, async (req, res) => {
     msgs.forEach(m => counts[m.senderId] = (counts[m.senderId] || 0) + 1);
     res.json(Object.entries(counts).map(([sender_id, count]) => ({ sender_id, count })));
   } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ─── Jeu Rimbaud ────────────────────────────────────────────
+app.get('/api/rimbaud/poems', auth, (req, res) => res.json(rimbaud.publicPoemList()));
+app.get('/api/rimbaud/scores', auth, async (req, res) => {
+  try { res.json(await rimbaud.leaderboard(20)); } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
 // ─── Admin ──────────────────────────────────────────────────
@@ -443,8 +482,11 @@ io.on('connection', (socket) => {
   if (user.role === 'admin') socket.join('admin-room');
   io.emit('online_users', Array.from(onlineUsers.values()));
 
-  socket.on('send_global_message', async ({ content, type = 'text' }) => {
-    if (!content || content.length > 2000) return;
+  rimbaud.attachSocket(io, socket, user);
+
+  socket.on('send_global_message', async ({ content, type = 'text', replyTo = null }) => {
+    if (!content || typeof content !== 'string' || content.length > 2000) return;
+    if (!['text', 'gif', 'image'].includes(type)) type = 'text';
 
     // Intercept slash commands (admin fun commands)
     if (type === 'text' && handleCommand(content, user, io, socket)) return;
@@ -453,24 +495,53 @@ io.on('connection', (socket) => {
       const u = await db.users.findOne({ id: user.id });
       return socket.emit('muted', { until: u?.muteUntil });
     }
-    const msg = { id: uuidv4(), room: 'global', senderId: user.id, senderName: user.username, content, type, createdAt: Date.now() };
+    const reply = await buildReplySnapshot(db.messages, replyTo, { room: 'global' });
+    const msg = { id: uuidv4(), room: 'global', senderId: user.id, senderName: user.username, content, type, createdAt: nextMsgTs(), reactions: {}, replyTo: reply };
     await db.messages.insert(msg);
-    io.to('global').emit('new_global_message', {
-      id: msg.id, room: 'global', sender_id: user.id, sender_name: user.username,
-      content, type, created_at: msg.createdAt, avatar: user.avatar || null
-    });
+    io.to('global').emit('new_global_message', serializeMessage(msg, user.avatar || null));
+
+    // A correct answer typed in the chat also wins the Rimbaud game
+    if (type === 'text') rimbaud.checkChatMessage(io, user, content);
   });
 
-  socket.on('send_private_message', async ({ receiverId, content, type = 'text' }) => {
-    if (!content || !receiverId || content.length > 2000) return;
+  socket.on('send_private_message', async ({ receiverId, content, type = 'text', replyTo = null }) => {
+    if (!content || typeof content !== 'string' || !receiverId || content.length > 2000) return;
+    if (!['text', 'gif', 'image'].includes(type)) type = 'text';
     if (await isUserMuted(user.id)) return socket.emit('muted', {});
     const receiver = await db.users.findOne({ id: receiverId, status: 'approved' });
     if (!receiver) return;
-    const msg = { id: uuidv4(), senderId: user.id, senderName: user.username, receiverId, content, type, read: false, createdAt: Date.now() };
+    const reply = await buildReplySnapshot(db.privateMessages, replyTo, {
+      $or: [{ senderId: user.id, receiverId }, { senderId: receiverId, receiverId: user.id }]
+    });
+    const msg = { id: uuidv4(), senderId: user.id, senderName: user.username, receiverId, content, type, read: false, createdAt: nextMsgTs(), reactions: {}, replyTo: reply };
     await db.privateMessages.insert(msg);
-    const out = { id: msg.id, sender_id: user.id, sender_name: user.username, receiver_id: receiverId, content, type, created_at: msg.createdAt, avatar: user.avatar || null };
+    const out = serializeMessage(msg, user.avatar || null);
     socket.emit('new_private_message', out);
     io.to(`user-${receiverId}`).emit('new_private_message', out);
+  });
+
+  // Emoji reactions (toggle) on global or private messages
+  socket.on('toggle_reaction', async ({ messageId, emoji, scope = 'global' }) => {
+    if (typeof messageId !== 'string' || !REACTION_EMOJIS.includes(emoji)) return;
+    const isPrivate = scope === 'private';
+    const store = isPrivate ? db.privateMessages : db.messages;
+    const filter = isPrivate
+      ? { id: messageId, $or: [{ senderId: user.id }, { receiverId: user.id }] }
+      : { id: messageId, room: 'global' };
+    const msg = await store.findOne(filter);
+    if (!msg || msg.deleted) return;
+    const reactions = { ...(msg.reactions || {}) };
+    const list = reactions[emoji] || [];
+    reactions[emoji] = list.includes(user.username) ? list.filter(n => n !== user.username) : [...list, user.username];
+    if (!reactions[emoji].length) delete reactions[emoji];
+    await store.update({ id: messageId }, { $set: { reactions } });
+    const payload = { id: messageId, reactions };
+    if (isPrivate) {
+      io.to(`user-${msg.senderId}`).emit('message_reactions', payload);
+      io.to(`user-${msg.receiverId}`).emit('message_reactions', payload);
+    } else {
+      io.to('global').emit('message_reactions', payload);
+    }
   });
 
   socket.on('typing', ({ room, receiverId }) => {

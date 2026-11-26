@@ -26,6 +26,28 @@ Un chat privé entre amis — beau, sécurisé, et simple à déployer.
   - Citations `> texte`
   - Couleurs : rouge, vert, bleu, violet, jaune, orange, rose
 
+### Interactions
+- 😍 **Réactions emoji** sur les messages (👍 ❤️ 😂 😮 😢 🔥…) — survol d'un message, clic sur une réaction pour l'ajouter/retirer
+- ↩️ **Répondre à un message** : la citation s'affiche au-dessus de la réponse, un clic ramène au message d'origine
+- 📣 **Mentions `@pseudo`** avec autocomplétion (Tab/Entrée), surlignage des messages qui vous mentionnent, son 🔔 et notification navigateur (bouton « Activer les notifications » dans l'en-tête), compteur de non-lus dans l'onglet
+
+### 🪶 Jeu Rimbaud — complète le vers
+Ouvert à tous les membres, une partie à la fois dans le chat global.
+
+| Commande | Effet |
+|----------|-------|
+| `/rimbaud` | Poème et vers au hasard |
+| `/rimbaud choisir` (ou bouton 🪶 Rimbaud) | Sélecteur : on choisit le poème et on **clique sur le mot** où le vers s'arrête |
+| `/rimbaud <poème> [vers] [mots]` | Ex. `/rimbaud dormeur 14 3` : 14e vers du *Dormeur du val*, 3 premiers mots affichés |
+| `/rimbaud liste` | Poèmes disponibles (19 poèmes, 452 vers) |
+| `/rimbaud indice` / `/rimbaud stop` | Révèle un mot (-1 pt) / arrête la partie (lanceur ou admin) |
+| `/scores` | Classement |
+
+- Réponse dans le panneau du jeu **ou directement dans le chat** ; accents, majuscules et ponctuation ignorés, petites fautes de frappe tolérées (mot par mot)
+- 3 points par vers trouvé, -1 par indice (minimum 1) ; minuteur de 1 à 5 min
+- Celui qui choisit le vers ne peut pas répondre à cette manche
+- Textes : *Poésies* d'Arthur Rimbaud (domaine public), fichier `server/rimbaud-poems.js`
+
 ### Profils
 - **Photo de profil** personnalisable
 - **Biographie** courte
@@ -153,6 +175,9 @@ friendchat/
 ├── server/                  # Backend Node.js
 │   ├── index.js             # Express + Socket.io principal
 │   ├── db.js                # Module base de données (NeDB)
+│   ├── commands.js          # Commandes « / »
+│   ├── rimbaud.js           # Jeu « complète le vers »
+│   ├── rimbaud-poems.js     # Poèmes de Rimbaud (domaine public)
 │   ├── data/                # Fichiers DB (auto-créé au 1er lancement)
 │   ├── uploads/             # Images uploadées
 │   ├── package.json
@@ -171,8 +196,10 @@ friendchat/
 │   │   ├── components/
 │   │   │   ├── Sidebar.js       # Navigation + liste membres
 │   │   │   ├── ChatWindow.js    # Fenêtre de chat
-│   │   │   ├── MessageBubble.js # Rendu des messages
-│   │   │   └── MessageInput.js  # Saisie + emoji + GIF + upload
+│   │   │   ├── MessageBubble.js # Rendu des messages (réactions, réponses, mentions)
+│   │   │   ├── MessageInput.js  # Saisie + emoji + GIF + upload + @mentions
+│   │   │   ├── RimbaudGame.js   # Panneau du jeu Rimbaud
+│   │   │   └── RimbaudPicker.js # Sélecteur poème / coupure
 │   │   └── styles/
 │   │       └── global.css
 │   ├── public/

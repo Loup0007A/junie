@@ -4,6 +4,31 @@ import { useAuth, useSocket, api } from '../hooks/useContexts';
 import MessageBubble, { DateDivider } from './MessageBubble';
 import MessageInput from './MessageInput';
 import { Avatar } from './Sidebar';
+import { openRimbaudPicker } from './RimbaudGame';
+import { isSoundOn, setSoundOn, notificationPermission, notificationsSupported, requestNotifications } from '../hooks/notify';
+
+// Header buttons: start the Rimbaud game, toggle sounds, enable browser notifications
+function HeaderTools({ isGlobal, onRimbaud }) {
+  const [sound, setSound] = useState(isSoundOn());
+  const [perm, setPerm] = useState(notificationPermission());
+  return (
+    <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, alignItems: 'center' }}>
+      {isGlobal && (
+        <button className="btn btn-ghost btn-sm" onClick={onRimbaud} title="Jeu : complète un vers de Rimbaud (/rimbaud)">🪶 Rimbaud</button>
+      )}
+      <button
+        className="btn btn-ghost btn-icon"
+        onClick={() => { setSoundOn(!sound); setSound(!sound); }}
+        title={sound ? 'Couper le son des mentions et MP' : 'Activer le son des mentions et MP'}
+      >{sound ? '🔔' : '🔕'}</button>
+      {notificationsSupported() && perm === 'default' && (
+        <button className="btn btn-secondary btn-sm" onClick={async () => setPerm(await requestNotifications())} title="Recevoir une notification quand on te mentionne ou t'écrit en privé">
+          Activer les notifications
+        </button>
+      )}
+    </div>
+  );
+}
 
 function groupMessages(messages) {
   const groups = [];
@@ -32,6 +57,7 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState([]);
+  const [replyingTo, setReplyingTo] = useState(null);
   const bottomRef = useRef(null);
   const typingTimeout = useRef({});
   const isGlobal = chatId === 'global';
@@ -102,6 +128,10 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
       setMessages(prev => prev.map(m => m.id === id ? { ...m, deleted: true } : m));
     };
 
+    const handleReactions = ({ id, reactions }) => {
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, reactions } : m));
+    };
+
     const handleTyping = ({ userId, username, room }) => {
       const relevantRoom = isGlobal ? 'global' : `pm-${chatUser?.id}`;
       if (room === relevantRoom && userId !== user.id) {
@@ -124,6 +154,7 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
     socket.on('new_global_message', handleNewGlobal);
     socket.on('new_private_message', handleNewPrivate);
     socket.on('message_deleted', handleDeleted);
+    socket.on('message_reactions', handleReactions);
     socket.on('user_typing', handleTyping);
     socket.on('user_stop_typing', handleStopTyping);
 
@@ -131,6 +162,7 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
       socket.off('new_global_message', handleNewGlobal);
       socket.off('new_private_message', handleNewPrivate);
       socket.off('message_deleted', handleDeleted);
+      socket.off('message_reactions', handleReactions);
       socket.off('user_typing', handleTyping);
       socket.off('user_stop_typing', handleStopTyping);
     };
@@ -138,12 +170,28 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
 
   const handleSend = useCallback(({ content, type }) => {
     if (!socket) return;
+    // Slash commands are never sent as replies
+    const replyTo = replyingTo && !(type === 'text' && content.startsWith('/')) ? replyingTo.id : null;
     if (isGlobal) {
-      socket.emit('send_global_message', { content, type });
+      socket.emit('send_global_message', { content, type, replyTo });
     } else {
-      socket.emit('send_private_message', { receiverId: chatUser.id, content, type });
+      socket.emit('send_private_message', { receiverId: chatUser.id, content, type, replyTo });
     }
-  }, [socket, isGlobal, chatUser]);
+    setReplyingTo(null);
+  }, [socket, isGlobal, chatUser, replyingTo]);
+
+  const handleReact = useCallback((messageId, emoji) => {
+    socket?.emit('toggle_reaction', { messageId, emoji, scope: isGlobal ? 'global' : 'private' });
+  }, [socket, isGlobal]);
+
+  const handleJumpTo = useCallback((id) => {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('msg-flash');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('msg-flash');
+  }, []);
 
   const handleTyping = useCallback((stop = false) => {
     if (!socket) return;
@@ -196,6 +244,7 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
             )}
           </>
         )}
+        <HeaderTools isGlobal={isGlobal} onRimbaud={openRimbaudPicker} />
       </div>
 
       {/* Messages */}
@@ -224,6 +273,10 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
                   showAvatar={item.showAvatar}
                   isOwn={item.message.sender_id === user.id}
                   onAdminDelete={handleAdminDelete}
+                  canDelete={isGlobal}
+                  onReact={handleReact}
+                  onReply={setReplyingTo}
+                  onJumpTo={handleJumpTo}
                 />
               )
             )}
@@ -260,6 +313,8 @@ export default function ChatWindow({ chatId, chatUser, clearedTs }) {
         onSend={handleSend}
         onTyping={handleTyping}
         disabled={isMuted}
+        replyingTo={replyingTo}
+        onCancelReply={() => setReplyingTo(null)}
         placeholder={isGlobal ? 'Message dans le chat global…' : `Message privé à ${chatUser?.username}…`}
       />
     </div>

@@ -10,6 +10,7 @@ const db = {
   messages: Datastore.create({ filename: path.join(DATA_DIR, 'messages.db'), autoload: true }),
   privateMessages: Datastore.create({ filename: path.join(DATA_DIR, 'private_messages.db'), autoload: true }),
   requests: Datastore.create({ filename: path.join(DATA_DIR, 'requests.db'), autoload: true }),
+  scores: Datastore.create({ filename: path.join(DATA_DIR, 'scores.db'), autoload: true }),
 };
 
 async function initIndexes() {
@@ -17,6 +18,7 @@ async function initIndexes() {
   await db.messages.ensureIndex({ fieldName: 'createdAt' });
   await db.privateMessages.ensureIndex({ fieldName: 'createdAt' });
   await db.requests.ensureIndex({ fieldName: 'username', unique: true });
+  await db.scores.ensureIndex({ fieldName: 'userId', unique: true });
 }
 
 module.exports = { db, initIndexes };

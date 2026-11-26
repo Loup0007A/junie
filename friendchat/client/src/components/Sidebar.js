@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, useSocket, api } from '../hooks/useContexts';
 
 function Avatar({ user, size = 36, online = false }) {
-  const initial = (user?.username || '?')[0].toUpperCase();
+  const initial = (Array.from(user?.username || '?')[0] || '?').toUpperCase();
   const colors = ['#7c5cbf', '#5c8abf', '#5cbf7c', '#bf5c7c', '#bf9c5c', '#5cbfbf'];
   const color = colors[(user?.username?.charCodeAt(0) || 0) % colors.length];
 
